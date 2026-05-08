@@ -1,14 +1,21 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect, type MouseEvent as ReactMouseEvent } from "react";
+import { Sidebar } from "@/components/Sidebar";
 import { ContactList } from "@/components/ContactList";
 import { ChatArea } from "@/components/ChatArea";
 import { ChatInput } from "@/components/ChatInput";
+import { useChatStore } from "@/stores/chat";
 import type { Contact, Message } from "@/types/chat";
-import {useAuthStore} from "@/stores/auth";
 
 // 模拟当前登录用户 ID（后续从 store 获取）
 const CURRENT_USER_ID = 1;
+
+// 宽度常量
+const DEFAULT_CONTACT_WIDTH = 280;
+const MIN_CONTACT_WIDTH = 200;
+const MAX_CONTACT_WIDTH = 480;
+const MIN_CHAT_WIDTH = 300;
 
 // 模拟联系人数据
 const mockContacts: Contact[] = [
@@ -75,6 +82,25 @@ export default function ChatPage() {
   const [activeContactId, setActiveContactId] = useState<number | null>(null);
   const [messages, setMessages] = useState<Record<number, Message[]>>(mockMessages);
 
+  // 拖拽状态
+  const [contactWidth, setContactWidth] = useState(DEFAULT_CONTACT_WIDTH);
+  const [dragging, setDragging] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // 选中联系人时自动聚焦输入框
+  useEffect(() => {
+    if (activeContactId !== null) {
+      // 等待 DOM 更新后聚焦
+      setTimeout(() => inputRef.current?.focus(), 0);
+    }
+  }, [activeContactId]);
+
+  // 每个联系人的独立输入文本 → 切换联系人自动切换输入内容
+  const inputTexts = useChatStore((s) => s.inputTexts);
+  const setInputText = useChatStore((s) => s.setInputText);
+  const chatInputValue = activeContactId ? (inputTexts[activeContactId] ?? "") : "";
+
   const activeContact = contacts.find((c) => c.id === activeContactId) ?? null;
   const activeMessages = activeContactId ? messages[activeContactId] ?? [] : [];
 
@@ -92,29 +118,89 @@ export default function ChatPage() {
         ...prev,
         [activeContactId]: [...(prev[activeContactId] ?? []), newMsg],
       }));
+      // 发送后清空该联系人的输入文本
+      setInputText(activeContactId, "");
     },
-    [activeContactId],
+    [activeContactId, setInputText],
   );
 
+  // --- 拖拽处理 ---
+  const handleMouseDown = useCallback((e: ReactMouseEvent) => {
+    e.preventDefault();
+    setDragging(true);
+  }, []);
+
+  useEffect(() => {
+    if (!dragging) {return;}
+
+    function handleMouseMove(e: globalThis.MouseEvent) {
+      if (!containerRef.current) {return;}
+      const rect = containerRef.current.getBoundingClientRect();
+      // 鼠标位置相对于容器左边缘，减去 sidebar 宽度
+      const sidebarWidth = 68;
+      const newWidth = e.clientX - rect.left - sidebarWidth;
+
+      // 限制最小/最大宽度
+      const maxWidth = Math.min(
+        rect.width - sidebarWidth - MIN_CHAT_WIDTH,
+        MAX_CONTACT_WIDTH,
+      );
+      setContactWidth(Math.min(Math.max(newWidth, MIN_CONTACT_WIDTH), maxWidth));
+    }
+
+    function handleMouseUp() {
+      setDragging(false);
+    }
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+    // 拖拽时防止选中文本
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "col-resize";
+
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+    };
+  }, [dragging]);
+
   return (
-    <div className="flex flex-1 overflow-hidden">
-      {/* 左侧联系人列表 */}
+    <div ref={containerRef} className="flex flex-1 overflow-hidden">
+      {/* 第一列：窄侧边栏 */}
+      <Sidebar />
+
+      {/* 第二列：联系人列表（可拖拽调整宽度） */}
       <ContactList
         contacts={contacts}
         activeContactId={activeContactId}
         onSelectContact={setActiveContactId}
+        style={{ width: contactWidth }}
+        showAddFriend
       />
 
-      {/* 右侧聊天区域 */}
+      {/* 拖拽手柄 */}
+      <div
+        onMouseDown={handleMouseDown}
+        className={`relative shrink-0 cursor-col-resize transition-colors ${
+          dragging ? " bg-primary/10" : "hover:bg-primary/30"
+        }`}
+      >
+        {/* 拖拽指示线 */}
+        <div
+          className={`absolute inset-y-0 left-1/2 w-px -translate-x-1/2 transition-colors ${
+            dragging ? "bg-primary/10" : "bg-border group-hover:bg-primary/40"
+          }`}
+        />
+      </div>
+
+      {/* 第三列：聊天区域 */}
       <div className="flex flex-1 flex-col overflow-hidden bg-muted/30">
         {activeContact ? (
           <>
             {/* 聊天头部 */}
-            <div className="flex h-14 shrink-0 items-center gap-3 border-b bg-card px-4">
-              {/* 头像占位 */}
-              <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-medium text-primary">
-                {activeContact.nickname.charAt(0)}
-              </div>
+            <div className="flex h-14 shrink-0 items-center bg-card px-4">
               <div className="flex flex-col">
                 <p className="text-sm font-medium">{activeContact.nickname}</p>
                 <p className="text-xs text-muted-foreground">
@@ -128,10 +214,21 @@ export default function ChatPage() {
               messages={activeMessages}
               currentUserId={CURRENT_USER_ID}
               contactName={activeContact.nickname}
+              contactUsername={activeContact.username}
+              contactAvatar={activeContact.avatar}
             />
 
             {/* 输入框 */}
-            <ChatInput onSend={handleSendMessage} />
+            <ChatInput
+              ref={inputRef}
+              value={chatInputValue}
+              onChange={(text) => {
+                if (activeContactId !== null) {
+                  setInputText(activeContactId, text);
+                }
+              }}
+              onSend={handleSendMessage}
+            />
           </>
         ) : (
           <div className="flex flex-1 items-center justify-center">

@@ -1,14 +1,20 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Message } from "@/types/chat";
 import { cn } from "@/lib/utils";
+import { getAvatarSrc } from "@/lib/avatar";
+import { useAuthStore } from "@/stores/auth";
 
 interface ChatAreaProps {
   messages: Message[];
   currentUserId: number;
-  /** 联系人昵称首字母，用于对方头像 */
+  /** 联系人昵称，用于头像 fallback 首字母 */
   contactName?: string;
+  /** 联系人用户名，用于 DiceBear 头像 seed */
+  contactUsername?: string;
+  /** 联系人头像 URL（优先使用） */
+  contactAvatar?: string;
 }
 
 /**
@@ -29,10 +35,18 @@ function shouldShowTime(messages: Message[], index: number): boolean {
   return messages[index].timestamp - messages[index - 1].timestamp > 300_000;
 }
 
-export function ChatArea({ messages, currentUserId, contactName }: ChatAreaProps) {
+export function ChatArea({ messages, currentUserId, contactName, contactUsername, contactAvatar }: ChatAreaProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const prevCountRef = useRef(messages.length);
+
+  const user = useAuthStore((s) => s.user);
+  const [selfAvatarError, setSelfAvatarError] = useState(false);
+  const [otherAvatarError, setOtherAvatarError] = useState(false);
+
+  const selfUsername = user?.username ?? "me";
+  const otherUsername = contactUsername ?? contactName ?? "?";
+  const otherInitial = (contactName || "?").charAt(0).toUpperCase();
 
   // 新消息到达时自动滚动到底部
   useEffect(() => {
@@ -81,7 +95,7 @@ export function ChatArea({ messages, currentUserId, contactName }: ChatAreaProps
       ref={scrollRef}
       className="flex-1 overflow-y-auto px-4 py-3"
     >
-      <div className="mx-auto max-w-3xl space-y-0.5">
+      <div className="mx-auto space-y-0.5">
         {messages.map((msg, index) => {
           const isSelf = msg.senderId === currentUserId;
           const showTime = shouldShowTime(messages, index);
@@ -107,17 +121,31 @@ export function ChatArea({ messages, currentUserId, contactName }: ChatAreaProps
               >
                 {/* 头像 */}
                 <div className="mb-0.5 shrink-0">
-                  <div
-                    className={cn(
-                      "flex size-8 items-center justify-center rounded-full text-xs font-semibold",
-                      isSelf
-                        ? "bg-primary/15 text-primary"
-                        : "bg-muted text-muted-foreground",
-                    )}
-                    title={isSelf ? "我" : contactName}
-                  >
-                    {isSelf ? "我" : initial}
-                  </div>
+                  {isSelf ? (
+                    selfAvatarError ? (
+                      <div className="flex size-8 items-center justify-center rounded-full bg-primary/15 text-xs font-semibold text-primary" title="我">
+                        我
+                      </div>
+                    ) : (
+                      <img
+                        src={getAvatarSrc(user?.avatar, selfUsername)}
+                        alt="我"
+                        onError={() => setSelfAvatarError(true)}
+                        className="size-8 rounded-full object-cover"
+                      />
+                    )
+                  ) : otherAvatarError ? (
+                    <div className="flex size-8 items-center justify-center rounded-full bg-muted text-xs font-semibold text-muted-foreground" title={contactName}>
+                      {otherInitial}
+                    </div>
+                  ) : (
+                    <img
+                      src={getAvatarSrc(contactAvatar, otherUsername)}
+                      alt={contactName || "?"}
+                      onError={() => setOtherAvatarError(true)}
+                      className="size-8 rounded-full object-cover"
+                    />
+                  )}
                 </div>
 
                 {/* 气泡 */}

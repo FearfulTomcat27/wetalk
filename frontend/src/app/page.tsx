@@ -1,8 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -14,46 +12,21 @@ import { useAuthStore } from "@/stores/auth";
 
 const features = ["即时消息，秒级送达", "安全可靠，隐私保护", "简洁易用，开箱即聊"];
 
+/**
+ * Dashboard 首页 — 纯展示组件。
+ * 已登录用户由 RouteGuard 自动跳转 /chat，此处仅渲染未登录着陆页。
+ */
 export default function HomePage() {
-  const router = useRouter();
-  const { token, _hydrated } = useAuthStore();
-  const init = useAuthStore((s) => s.init);
-  const isLoggedIn = Boolean(token);
+  const token = useAuthStore((s) => s.token);
 
-  // 客户端 hydration：从 localStorage 恢复 token
-  useEffect(() => {
-    init();
-  }, [init]);
-
-  // hydration 完成后 → 已登录则跳转
-  useEffect(() => {
-    if (_hydrated && isLoggedIn) {
-      router.replace("/chat");
-    }
-  }, [_hydrated, isLoggedIn, router]);
-
-  // SSR 或尚未 hydration → 等待
-  if (!_hydrated) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-zinc-50 dark:bg-black px-4">
-        <p className="text-sm text-muted-foreground">加载中…</p>
-      </div>
-    );
-  }
-
-  // 已登录 → 显示跳转 loading（useEffect 中执行 replace）
-  if (isLoggedIn) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-zinc-50 dark:bg-black px-4">
-        <p className="text-sm text-muted-foreground">正在跳转...</p>
-      </div>
-    );
+  // 已登录 → RouteGuard 会处理跳转和 loading UI
+  if (token) {
+    return null;
   }
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-zinc-50 dark:bg-black px-4">
       <div className="w-full max-w-lg text-center space-y-8">
-        {/* Hero */}
         <div className="space-y-4">
           <h1 className="text-4xl font-bold tracking-tight text-foreground sm:text-5xl">
             WeTalk
@@ -63,7 +36,6 @@ export default function HomePage() {
           </p>
         </div>
 
-        {/* Feature List */}
         <Card>
           <CardHeader>
             <CardTitle className="text-lg">功能特性</CardTitle>
@@ -79,7 +51,6 @@ export default function HomePage() {
           </CardContent>
         </Card>
 
-        {/* CTA Buttons */}
         <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
           <Button size="lg" asChild className="sm:w-32">
             <Link href="/login">登录</Link>

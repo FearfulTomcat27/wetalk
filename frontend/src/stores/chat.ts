@@ -6,16 +6,15 @@ interface ChatState {
   activeContactId: number | null;
   /** contactId → Message[] */
   messages: Record<number, Message[]>;
-  inputText: string;
+  /** contactId → 输入框草稿文本 */
+  inputTexts: Record<number, string>;
 
   setContacts: (contacts: Contact[]) => void;
   selectContact: (id: number) => void;
-  setInputText: (text: string) => void;
+  setInputText: (contactId: number, text: string) => void;
   sendMessage: () => void;
   addContact: (contact: Contact) => void;
-  /** 从服务端批量加载消息，合并到本地 state */
   loadMessages: (contactId: number, msgs: Message[]) => void;
-  /** 由后端推送或轮询到达的新消息 */
   receiveMessage: (msg: Message) => void;
 }
 
@@ -25,7 +24,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   contacts: [],
   activeContactId: null,
   messages: {},
-  inputText: "",
+  inputTexts: {},
 
   setContacts: (contacts: Contact[]) => {
     set({ contacts });
@@ -33,7 +32,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   selectContact: (id: number) => {
     set({ activeContactId: id });
-    // 清除该联系人的未读数
     set((state) => ({
       contacts: state.contacts.map((c) =>
         c.id === id ? { ...c, unread: 0 } : c
@@ -41,13 +39,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }));
   },
 
-  setInputText: (text: string) => {
-    set({ inputText: text });
+  setInputText: (contactId: number, text: string) => {
+    set((state) => ({
+      inputTexts: { ...state.inputTexts, [contactId]: text },
+    }));
   },
 
   sendMessage: () => {
-    const { activeContactId, inputText, contacts } = get();
-    if (activeContactId === null || inputText.trim() === "") {
+    const { activeContactId, inputTexts, contacts } = get();
+    if (activeContactId === null) {
+      return;
+    }
+    const text = (inputTexts[activeContactId] || "").trim();
+    if (text === "") {
       return;
     }
 
@@ -55,7 +59,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       id: nextMessageId++,
       contactId: activeContactId,
       senderId: 0, // 0 = 自己
-      content: inputText.trim(),
+      content: text,
       timestamp: Date.now(),
     };
 
@@ -68,11 +72,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
         ],
       },
       contacts: contacts.map((c) =>
-        c.id === activeContactId
-          ? { ...c, lastMessage: inputText.trim() }
-          : c
+        c.id === activeContactId ? { ...c, lastMessage: text } : c
       ),
-      inputText: "",
+      inputTexts: { ...state.inputTexts, [activeContactId]: "" },
     }));
   },
 
@@ -87,23 +89,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   loadMessages: (contactId: number, msgs: Message[]) => {
     set((state) => ({
-      messages: {
-        ...state.messages,
-        [contactId]: msgs,
-      },
+      messages: { ...state.messages, [contactId]: msgs },
     }));
   },
 
   receiveMessage: (msg: Message) => {
     set((state) => {
       const existing = state.messages[msg.contactId] || [];
-      // 去重
       if (existing.some((m) => m.id === msg.id)) {
         return state;
       }
-
       const isActive = state.activeContactId === msg.contactId;
-
       return {
         messages: {
           ...state.messages,
@@ -111,11 +107,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         },
         contacts: state.contacts.map((c) =>
           c.id === msg.contactId
-            ? {
-                ...c,
-                lastMessage: msg.content,
-                unread: isActive ? c.unread : c.unread + 1,
-              }
+            ? { ...c, lastMessage: msg.content, unread: isActive ? c.unread : c.unread + 1 }
             : c
         ),
       };

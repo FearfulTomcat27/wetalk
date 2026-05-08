@@ -3,13 +3,13 @@ import { toast } from "sonner";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
 
-interface ApiResponse<T = unknown> {
+export interface ApiResponse<T = unknown> {
   code: number;
   message: string;
   data?: T;
 }
 
-class ApiError extends Error {
+export class ApiError extends Error {
   code: number;
   constructor(code: number, message: string) {
     super(message);
@@ -18,7 +18,7 @@ class ApiError extends Error {
   }
 }
 
-const client = axios.create({
+export const client = axios.create({
   baseURL: BASE_URL,
   timeout: 10000,
   headers: { "Content-Type": "application/json" },
@@ -46,7 +46,6 @@ client.interceptors.response.use(
       } else if (error.code === "ECONNABORTED") {
         toast.error("请求超时，请稍后重试");
       } else if (!error.response) {
-        // 网络错误：无 response 对象
         toast.error("网络异常，请稍后重试");
       } else {
         toast.error("请求失败，请稍后重试");
@@ -61,44 +60,9 @@ client.interceptors.response.use(
   },
 );
 
-async function request<T = unknown>(config: Parameters<typeof client.request>[0]): Promise<ApiResponse<T>> {
+export async function request<T = unknown>(
+  config: Parameters<typeof client.request>[0],
+): Promise<ApiResponse<T>> {
   const res = await client.request<ApiResponse<T>>(config);
   return res.data;
 }
-
-export interface LoginRequest {
-  username: string;
-  password: string;
-}
-
-export interface RegisterRequest {
-  username: string;
-  password: string;
-  confirmPassword: string;
-  nickname?: string;
-}
-
-export interface AuthResponse {
-  token: string;
-  user: {
-    id: number;
-    username: string;
-    nickname: string;
-  };
-}
-
-export function login(data: LoginRequest) {
-  return request<AuthResponse>({ method: "POST", url: "/api/auth/login", data });
-}
-
-export function register(data: RegisterRequest) {
-  const { confirmPassword: _, ...payload } = data;
-  return request<AuthResponse>({ method: "POST", url: "/api/auth/register", data: payload });
-}
-
-export function fetchCurrentUser() {
-  return request<Omit<AuthResponse, "token">>({ method: "GET", url: "/api/me" });
-}
-
-export { client, request, ApiError };
-export type { ApiResponse };

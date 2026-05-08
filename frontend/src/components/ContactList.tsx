@@ -1,17 +1,48 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import type { Contact } from "@/types/chat";
 import { cn } from "@/lib/utils";
+import { getAvatarSrc } from "@/lib/avatar";
+import { UserPlus } from "lucide-react";
+import { AddFriendDialog } from "@/components/AddFriendDialog";
 
 interface ContactListProps {
   contacts: Contact[];
   activeContactId: number | null;
   onSelectContact: (id: number) => void;
+  className?: string;
+  style?: React.CSSProperties;
+  /** 显示模式：chat 含消息预览和未读，contacts 仅头像+用户名 */
+  variant?: "chat" | "contacts";
+  /** 是否显示添加好友按钮 */
+  showAddFriend?: boolean;
+  /** 搜索框下方的自定义内容 */
+  headerContent?: React.ReactNode;
 }
 
-export function ContactList({ contacts, activeContactId, onSelectContact }: ContactListProps) {
+export function ContactList({
+  contacts,
+  activeContactId,
+  onSelectContact,
+  className,
+  style,
+  variant = "chat",
+  showAddFriend = false,
+  headerContent,
+}: ContactListProps) {
   const [search, setSearch] = useState("");
+  const [avatarErrors, setAvatarErrors] = useState<Set<number>>(new Set());
+  const [addFriendOpen, setAddFriendOpen] = useState(false);
+
+  const handleAvatarError = useCallback((contactId: number) => {
+    setAvatarErrors((prev) => {
+      if (prev.has(contactId)) {return prev;}
+      const next = new Set(prev);
+      next.add(contactId);
+      return next;
+    });
+  }, []);
 
   const filteredContacts = useMemo(() => {
     if (!search.trim()) {return contacts;}
@@ -24,43 +55,59 @@ export function ContactList({ contacts, activeContactId, onSelectContact }: Cont
   }, [contacts, search]);
 
   return (
-    <aside className="flex w-80 shrink-0 flex-col border-r bg-card">
-      {/* 搜索框 */}
+    <aside className={cn("flex shrink-0 flex-col border-r bg-card", className)} style={style}>
+      {/* 搜索框 + 添加好友 */}
       <div className="shrink-0 px-3 py-3">
-        <div className="relative">
-          <svg
-            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-            />
-          </svg>
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="搜索联系人…"
-            className="w-full rounded-lg border border-border bg-muted/50 py-2 pl-9 pr-8 text-sm text-foreground placeholder:text-muted-foreground/50 transition-colors focus:border-primary/30 focus:bg-background focus:outline-none focus:ring-2 focus:ring-primary/10"
-          />
-          {search && (
-            <button
-              onClick={() => setSearch("")}
-              className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground/50 transition-colors hover:text-muted-foreground"
-              aria-label="清除搜索"
+        <div className="flex items-center gap-1.5">
+          <div className="relative flex-1">
+            <svg
+              className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
             >
-              <svg className="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+              />
+            </svg>
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="搜索联系人…"
+              className="w-full rounded-lg border border-border bg-muted/50 py-2 pl-9 pr-8 text-sm text-foreground placeholder:text-muted-foreground/50 transition-colors focus:border-primary/30 focus:bg-background focus:outline-none focus:ring-2 focus:ring-primary/10"
+            />
+            {search && (
+              <button
+                onClick={() => setSearch("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground/50 transition-colors hover:text-muted-foreground"
+                aria-label="清除搜索"
+              >
+                <svg className="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
+          </div>
+
+          {/* 添加好友按钮 — 搜索框右侧 */}
+          {showAddFriend && (
+            <button
+              onClick={() => setAddFriendOpen(true)}
+              className="flex size-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              title="添加好友"
+            >
+              <UserPlus className="size-5" />
             </button>
           )}
         </div>
       </div>
+
+      {/* 自定义头部内容 */}
+      {headerContent}
 
       {/* 联系人列表 */}
       <div className="flex-1 overflow-y-auto">
@@ -106,6 +153,7 @@ export function ContactList({ contacts, activeContactId, onSelectContact }: Cont
             {filteredContacts.map((contact) => {
               const isActive = contact.id === activeContactId;
               const hasUnread = contact.unread > 0;
+              const isChat = variant === "chat";
 
               return (
                 <li key={contact.id}>
@@ -121,18 +169,27 @@ export function ContactList({ contacts, activeContactId, onSelectContact }: Cont
                   >
                     {/* 头像 */}
                     <div className="relative shrink-0">
-                      <div
-                        className={cn(
-                          "flex size-11 items-center justify-center rounded-full text-sm font-semibold transition-colors",
-                          isActive
-                            ? "bg-primary text-primary-foreground"
-                            : "bg-muted text-muted-foreground group-hover:bg-muted-foreground/15",
-                        )}
-                      >
-                        {(contact.nickname || contact.username).charAt(0).toUpperCase()}
-                      </div>
-                      {/* 未读红点 - 微信风格 */}
-                      {hasUnread && !isActive && (
+                      {avatarErrors.has(contact.id) ? (
+                        <div
+                          className={cn(
+                            "flex size-11 items-center justify-center rounded-full text-sm font-semibold transition-colors",
+                            isActive
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-muted text-muted-foreground group-hover:bg-muted-foreground/15",
+                          )}
+                        >
+                          {(contact.nickname || contact.username).charAt(0).toUpperCase()}
+                        </div>
+                      ) : (
+                        <img
+                          src={getAvatarSrc(contact.avatar, contact.username)}
+                          alt={contact.nickname || contact.username}
+                          onError={() => handleAvatarError(contact.id)}
+                          className="size-11 rounded-full object-cover"
+                        />
+                      )}
+                      {/* 未读红点 — 仅 chat 模式 */}
+                      {isChat && hasUnread && !isActive && (
                         <span className="absolute -right-0.5 -top-0.5 flex min-w-[16px] items-center justify-center rounded-full bg-destructive px-1 py-0 text-[10px] font-bold leading-4 text-destructive-foreground shadow-sm">
                           {contact.unread > 99 ? "99+" : contact.unread}
                         </span>
@@ -145,21 +202,22 @@ export function ContactList({ contacts, activeContactId, onSelectContact }: Cont
                         <p
                           className={cn(
                             "truncate text-sm",
-                            hasUnread && !isActive
+                            isChat && hasUnread && !isActive
                               ? "font-semibold text-foreground"
                               : "font-medium text-foreground",
                           )}
                         >
                           {contact.nickname || contact.username}
                         </p>
-                        {/* 活跃状态下的未读标记 */}
-                        {hasUnread && isActive && (
+                        {/* 活跃状态下的未读标记 — 仅 chat 模式 */}
+                        {isChat && hasUnread && isActive && (
                           <span className="shrink-0 rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-bold leading-none text-primary-foreground">
                             {contact.unread > 99 ? "99+" : contact.unread}
                           </span>
                         )}
                       </div>
-                      {contact.lastMessage && (
+                      {/* 最后消息 — 仅 chat 模式 */}
+                      {isChat && contact.lastMessage && (
                         <p
                           className={cn(
                             "mt-0.5 truncate text-xs",
@@ -179,6 +237,9 @@ export function ContactList({ contacts, activeContactId, onSelectContact }: Cont
           </ul>
         )}
       </div>
+
+      {/* 添加好友弹窗 */}
+      <AddFriendDialog open={addFriendOpen} onOpenChange={setAddFriendOpen} />
     </aside>
   );
 }

@@ -6,6 +6,7 @@ interface User {
   id: number;
   username: string;
   nickname: string;
+  avatar?: string;
 }
 
 interface AuthState {
@@ -15,6 +16,8 @@ interface AuthState {
   error: string | null;
   /** 是否已完成客户端 hydration（从 localStorage 恢复 token） */
   _hydrated: boolean;
+  /** user 信息是否已加载完成（含 fetchUser 成功/失败/无需加载） */
+  _userFetched: boolean;
 
   init: () => void;
   login: (data: LoginRequest) => Promise<void>;
@@ -31,6 +34,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   isLoading: false,
   error: null,
   _hydrated: false,
+  _userFetched: false,
 
   init: () => {
     // 防止重复初始化
@@ -40,19 +44,27 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
     set({ token, _hydrated: true });
 
+    // 无 token → 无需拉取 user
+    if (!token) {
+      set({ _userFetched: true });
+      return;
+    }
+
     // token 存在但 user 为空 → 异步获取用户信息
-    if (token && !get().user) {
+    if (!get().user) {
       set({ isLoading: true });
       fetchCurrentUser()
         .then((res) => {
           const { user } = res.data!;
-          set({ user, isLoading: false });
+          set({ user, isLoading: false, _userFetched: true });
         })
         .catch(() => {
           // token 过期或无效 → 清除
           localStorage.removeItem("token");
-          set({ token: null, user: null, isLoading: false });
+          set({ token: null, user: null, isLoading: false, _userFetched: true });
         });
+    } else {
+      set({ _userFetched: true });
     }
   },
 
@@ -62,7 +74,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const res = await loginApi(data);
       const { token, user } = res.data!;
       localStorage.setItem("token", token);
-      set({ token, user, isLoading: false });
+      set({ token, user, isLoading: false, _userFetched: true });
     } catch (err) {
       const message =
         err instanceof ApiError ? err.message : "登录失败，请稍后重试";
@@ -77,7 +89,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const res = await registerApi(data);
       const { token, user } = res.data!;
       localStorage.setItem("token", token);
-      set({ token, user, isLoading: false });
+      set({ token, user, isLoading: false, _userFetched: true });
     } catch (err) {
       const message =
         err instanceof ApiError ? err.message : "注册失败，请稍后重试";
@@ -88,7 +100,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   logout: () => {
     localStorage.removeItem("token");
-    set({ token: null, user: null, error: null });
+    set({ token: null, user: null, error: null, _userFetched: false });
   },
 
   fetchUser: async () => {

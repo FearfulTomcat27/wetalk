@@ -1,5 +1,7 @@
+import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Toaster } from "@/components/ui/toaster";
+import RouteGuard from "@/components/RouteGuard";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -12,19 +14,19 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export const metadata = {
+export const metadata: Metadata = {
   title: "WeTalk",
   description: "WeTalk - 实时聊天应用",
 };
 
-export default function RootLayout({ children }) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html
       lang="zh-CN"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        {children}
+        <RouteGuard>{children}</RouteGuard>
         <Toaster position="top-center" />
       </body>
     </html>
