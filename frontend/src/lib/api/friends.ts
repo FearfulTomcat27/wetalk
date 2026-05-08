@@ -1,9 +1,14 @@
 import { request } from "./request";
 import type { UserInfo } from "./users";
 
-export interface FriendInfo extends UserInfo {
-  /** 好友关系创建时间 */
-  createdAt?: string;
+/** 好友信息 — 匹配后端 { friend_id, friend_name, friend_avatar, created_at, last_message, unread_count } */
+export interface FriendInfo {
+  friend_id: number;
+  friend_name: string;
+  friend_avatar?: string;
+  created_at?: string;
+  last_message?: string;
+  unread_count?: number;
 }
 
 /** 待处理的好友请求 — 匹配后端 { id, user: {...}, createdAt } */

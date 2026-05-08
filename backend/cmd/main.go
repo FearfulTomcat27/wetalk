@@ -1,17 +1,21 @@
 package main
 
 import (
+	"context"
 	"log"
-
-	"github.com/gin-contrib/cors"
-	"github.com/gin-gonic/gin"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"wetalk/config"
 	"wetalk/db"
 	"wetalk/internal/friend"
 	"wetalk/internal/message"
-	"wetalk/internal/middleware"
+	"wetalk/internal/router"
 	"wetalk/internal/user"
+	"wetalk/internal/ws"
 )
 
 func main() {
@@ -33,68 +37,77 @@ func main() {
 	}
 	defer db.CloseRedis()
 
-	// 启动 HTTP 服务
-	r := gin.Default()
+	// 创建 Hub 并启动
+	hub := ws.NewHub()
+	go hub.Run()
 
-	// CORS 中间件：允许前端跨域请求
-	r.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:3000"},
-		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
-		ExposeHeaders:    []string{"Content-Length"},
-		AllowCredentials: true,
-	}))
+	// 创建服务
+	msgSvc := message.NewService()
+	userSvc := user.NewService(cfg.JWT.Secret, cfg.JWT.ExpireHours)
+	friendSvc := friend.NewService()
 
-	// ping
-	r.GET("/ping", func(c *gin.Context) {
-		c.JSON(200, gin.H{"message": "pong"})
+	// WS 发送消息回调（桥接 ws 包与 message 包，避免循环依赖）
+	sendMsgFunc := func(senderID int64, receiverID int64, content string, clientMsgID string) (*ws.SentMessage, error) {
+		msg, err := msgSvc.SendMessage(senderID, message.SendMessageRequest{
+			ReceiverID: receiverID,
+			Content:    content,
+		})
+		if err != nil {
+			return nil, err
+		}
+		return &ws.SentMessage{
+			ID:          msg.ID,
+			SenderID:    msg.SenderID,
+			ReceiverID:  msg.ReceiverID,
+			Content:     msg.Content,
+			ContentType: msg.ContentType,
+			Status:      msg.Status,
+			CreatedAt:   msg.CreatedAt,
+		}, nil
+	}
+
+	// 创建 Handler
+	userHandler := user.NewHandler(userSvc)
+	friendHandler := friend.NewHandler(friendSvc)
+	msgHandler := message.NewHandler(msgSvc, hub)
+
+	// 注册路由
+	r := router.Setup(&router.Dependencies{
+		Config:        cfg,
+		Hub:           hub,
+		SendMsgFunc:   sendMsgFunc,
+		UserHandler:   userHandler,
+		FriendHandler: friendHandler,
+		MsgHandler:    msgHandler,
 	})
 
-	// 认证路由（无需 JWT）
-	userSvc := user.NewService(cfg.JWT.Secret, cfg.JWT.ExpireHours)
-	userHandler := user.NewHandler(userSvc)
-	auth := r.Group("/api/auth")
-	{
-		auth.POST("/register", userHandler.Register)
-		auth.POST("/login", userHandler.Login)
+	// 启动 HTTP 服务
+	srv := &http.Server{
+		Addr:    ":8080",
+		Handler: r,
 	}
 
-	// 需要认证的路由
-	api := r.Group("/api")
-	api.Use(middleware.AuthMiddleware(cfg.JWT.Secret))
-	{
-		// 当前用户
-		api.GET("/me", func(c *gin.Context) {
-			userID := c.GetInt64("user_id")
-			c.JSON(200, gin.H{"code": 200, "data": gin.H{"user_id": userID}})
-		})
-
-		// 用户搜索
-		api.GET("/users", userHandler.Search)
-
-		// 好友管理
-		friendSvc := friend.NewService()
-		friendHandler := friend.NewHandler(friendSvc)
-		friends := api.Group("/friends")
-		{
-			friends.POST("", friendHandler.Add)
-			friends.GET("", friendHandler.List)
-			friends.PUT("/:id/accept", friendHandler.Accept)
-			friends.DELETE("/:id", friendHandler.Delete)
+	go func() {
+		log.Println("服务启动在 :8080")
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("服务启动失败: %v", err)
 		}
+	}()
 
-		// 消息管理
-		msgSvc := message.NewService()
-		msgHandler := message.NewHandler(msgSvc)
-		messages := api.Group("/messages")
-		{
-			messages.POST("", msgHandler.Send)
-			messages.GET("", msgHandler.List)
-		}
+	// 优雅关闭
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+	log.Println("正在关闭服务...")
+
+	// 逆序关闭：HTTP → Hub → DB/Redis
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Printf("服务强制关闭: %v", err)
 	}
 
-	log.Println("服务启动在 :8080")
-	if err := r.Run(":8080"); err != nil {
-		log.Fatalf("服务启动失败: %v", err)
-	}
+	hub.Shutdown()
+
+	log.Println("服务已关闭")
 }

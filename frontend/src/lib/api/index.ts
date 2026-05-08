@@ -21,5 +21,5 @@ export {
 export type { FriendInfo, PendingRequest } from "./friends";
 
 // 消息
-export { sendMessage, getMessages } from "./messages";
+export { sendMessage, getMessages, markAsRead } from "./messages";
 export type { SendMessageRequest } from "./messages";

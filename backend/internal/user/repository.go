@@ -1,7 +1,9 @@
 package user
 
 import (
-	"database/sql"
+	"errors"
+
+	"gorm.io/gorm"
 
 	"wetalk/db"
 )
@@ -14,57 +16,52 @@ var Repository = &repository{}
 
 // FindByUsername 根据用户名查找用户
 func (r *repository) FindByUsername(username string) (*User, error) {
-	u := &User{}
-	err := db.DB.QueryRow(
-		"SELECT id, username, password_hash, nickname, avatar, created_at, updated_at FROM users WHERE username = ?",
-		username,
-	).Scan(&u.ID, &u.Username, &u.PasswordHash, &u.Nickname, &u.Avatar, &u.CreatedAt, &u.UpdatedAt)
-
-	if err == sql.ErrNoRows {
+	var u User
+	err := db.DB.Where("username = ?", username).First(&u).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	return u, nil
+	return &u, nil
 }
 
-// SearchByUsername 根据用户名前缀搜索用户（排除密码字段）
-func (r *repository) SearchByUsername(keyword string, limit int) ([]User, error) {
-	rows, err := db.DB.Query(
-		"SELECT id, username, '', nickname, avatar, created_at, updated_at FROM users WHERE username LIKE ? LIMIT ?",
-		"%"+keyword+"%", limit,
-	)
+// FindByID 根据 ID 查找用户
+func (r *repository) FindByID(id int64) (*User, error) {
+	var u User
+	err := db.DB.Where("id = ?", id).First(&u).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	return &u, nil
+}
 
+// SearchByUsername 根据用户名模糊搜索
+func (r *repository) SearchByUsername(keyword string, limit int) ([]User, error) {
 	var users []User
-	for rows.Next() {
-		var u User
-		if err := rows.Scan(&u.ID, &u.Username, &u.PasswordHash, &u.Nickname, &u.Avatar, &u.CreatedAt, &u.UpdatedAt); err != nil {
-			return nil, err
-		}
-		users = append(users, u)
+	err := db.DB.Where("username LIKE ?", "%"+keyword+"%").
+		Limit(limit).
+		Find(&users).Error
+	if err != nil {
+		return nil, err
 	}
-	return users, rows.Err()
+	return users, nil
 }
 
 // Create 创建用户
-func (r *repository) Create(username, passwordHash, nickname string) (*User, error) {
-	result, err := db.DB.Exec(
-		"INSERT INTO users (username, password_hash, nickname) VALUES (?, ?, ?)",
-		username, passwordHash, nickname,
-	)
-	if err != nil {
+func (r *repository) Create(username, passwordHash, nickname, avatar string) (*User, error) {
+	user := &User{
+		Username:     username,
+		PasswordHash: passwordHash,
+		Nickname:     nickname,
+		Avatar:       avatar,
+	}
+	if err := db.DB.Create(user).Error; err != nil {
 		return nil, err
 	}
-
-	userID, _ := result.LastInsertId()
-	return &User{
-		ID:       userID,
-		Username: username,
-		Nickname: nickname,
-	}, nil
+	return user, nil
 }

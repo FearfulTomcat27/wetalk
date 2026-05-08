@@ -18,21 +18,33 @@ interface ChatAreaProps {
 }
 
 /**
- * 格式化时间戳为 HH:mm
+ * 格式化时间戳，当天显示 HH:mm，跨天显示 MM-DD HH:mm
  */
-function formatTime(ts: number): string {
+function formatTime(ts: string | number): string {
   const date = new Date(ts);
+  const now = new Date();
   const hours = date.getHours().toString().padStart(2, "0");
   const minutes = date.getMinutes().toString().padStart(2, "0");
-  return `${hours}:${minutes}`;
+
+  const isToday =
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate();
+
+  if (isToday) {
+    return `${hours}:${minutes}`;
+  }
+  const month = (date.getMonth() + 1).toString().padStart(2, "0");
+  const day = date.getDate().toString().padStart(2, "0");
+  return `${month}-${day} ${hours}:${minutes}`;
 }
 
 /**
- * 判断是否需要在两条消息之间展示时间分隔符（间隔 > 5 分钟）
+ * 判断是否需要在两条消息之间展示时间分隔符（间隔 > 2 分钟）
  */
 function shouldShowTime(messages: Message[], index: number): boolean {
   if (index === 0) {return true;}
-  return messages[index].timestamp - messages[index - 1].timestamp > 300_000;
+  return new Date(messages[index].created_at).getTime() - new Date(messages[index - 1].created_at).getTime() > 120_000;
 }
 
 export function ChatArea({ messages, currentUserId, contactName, contactUsername, contactAvatar }: ChatAreaProps) {
@@ -97,7 +109,7 @@ export function ChatArea({ messages, currentUserId, contactName, contactUsername
     >
       <div className="mx-auto space-y-0.5">
         {messages.map((msg, index) => {
-          const isSelf = msg.senderId === currentUserId;
+          const isSelf = msg.sender_id === currentUserId;
           const showTime = shouldShowTime(messages, index);
           const initial = contactName?.charAt(0).toUpperCase() || "?";
 
@@ -107,7 +119,7 @@ export function ChatArea({ messages, currentUserId, contactName, contactUsername
               {showTime && (
                 <div className="flex items-center justify-center py-3">
                   <span className="select-none rounded-md bg-muted/50 px-3 py-0.5 text-[11px] leading-relaxed text-muted-foreground/80">
-                    {formatTime(msg.timestamp)}
+                    {formatTime(msg.created_at)}
                   </span>
                 </div>
               )}
@@ -160,15 +172,6 @@ export function ChatArea({ messages, currentUserId, contactName, contactUsername
                   <p className="whitespace-pre-wrap break-words">
                     {msg.content}
                   </p>
-                  {/* 气泡内时间 */}
-                  <span
-                    className={cn(
-                      "mt-1 flex justify-end text-[10px] opacity-45",
-                      isSelf ? "text-black" : "text-muted-foreground",
-                    )}
-                  >
-                    {formatTime(msg.timestamp)}
-                  </span>
                 </div>
               </div>
             </div>

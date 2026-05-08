@@ -62,6 +62,25 @@ func (h *Handler) Login(c *gin.Context) {
 	utils.Success(c, http.StatusOK, "登录成功", resp)
 }
 
+// Me 获取当前用户完整信息
+func (h *Handler) Me(c *gin.Context) {
+	userID := c.GetInt64("user_id")
+
+	user, err := h.svc.GetUserByID(userID)
+	if err != nil {
+		utils.Error(c, http.StatusInternalServerError, "查询用户失败")
+		return
+	}
+	if user == nil {
+		utils.Error(c, http.StatusNotFound, "用户不存在")
+		return
+	}
+
+	utils.Success(c, http.StatusOK, "成功", gin.H{
+		"user": user,
+	})
+}
+
 // Search 搜索用户（用于添加好友）
 func (h *Handler) Search(c *gin.Context) {
 	keyword := c.Query("keyword")

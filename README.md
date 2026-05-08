@@ -2,25 +2,41 @@
 
 在线聊天应用，C/S 架构。前端 Next.js 16 (React 19) + Go/gin 后端 + MySQL + Redis。
 
+## 功能
+
+- 用户注册/登录（JWT + bcrypt）
+- Dashboard 首页
+- 微信风格三列聊天面板（联系人列表 | 消息气泡 | 输入框）
+- WebSocket 实时消息推送（auth frame 认证，心跳保活，断线重连）
+- 乐观 UI 发送（临时消息 + 服务端确认替换）
+- 离线降级（WS 断开时自动切换 HTTP POST）
+- 消息输入框（Enter 发送 / Shift+Enter 换行）
+- 联系人页面，好友添加/搜索/申请/同意/拒绝
+- 好友请求待处理通知
+- 全局路由守卫（登录/未登录自动跳转）
+- DiceBear 头像自动生成
+- 联系人列表与聊天区域支持拖拽调整宽度
+
 ## 项目结构
 
 ```
 wetalk/
-├── frontend/                 # Next.js 16 前端 (App Router, Turbopack)
+├── frontend/                    # Next.js 16 前端 (App Router, Turbopack)
 │   └── src/
-│       ├── app/              # 页面路由 (/, /login, /register, /chat)
-│       ├── components/       # UI 组件 (shadcn/ui)
-│       ├── stores/           # zustand 状态管理
-│       ├── lib/              # API 客户端 (axios), 验证 (zod)
-│       └── hooks/            # React hooks
-├── backend/                  # Go 1.26 后端
-│   ├── cmd/                  # 入口 main.go
-│   ├── internal/             # 业务模块 (user, message, friend, middleware)
-│   ├── config/               # 配置加载
-│   ├── db/                   # MySQL + Redis 连接
-│   ├── pkg/                  # 公共包 (errors, utils)
-│   └── scripts/migrations/   # SQL 迁移
-└── CLAUDE.md                 # AI 助手指南
+│       ├── app/                 # 页面路由 (/, /login, /register, /chat, /contacts)
+│       ├── components/          # 组件 (RouteGuard, Sidebar, ContactList, ChatArea...)
+│       │   └── ui/              # shadcn/ui 组件
+│       ├── stores/              # zustand 状态 (auth, chat)
+│       ├── lib/api/             # 模块化 API 客户端 (axios)
+│       └── config/              # 路由权限配置
+├── backend/                     # Go 1.26 后端
+│   ├── cmd/                     # 入口 main.go
+│   ├── internal/                # 业务模块 (router, user, friend, message, ws, middleware)
+│   ├── config/                  # 配置加载
+│   ├── db/                      # MySQL + Redis 连接
+│   ├── pkg/                     # 公共包 (errors, utils)
+│   └── scripts/migrations/      # SQL 迁移
+└── CLAUDE.md                    # AI 助手指南
 ```
 
 ## 快速开始
@@ -31,20 +47,19 @@ wetalk/
 cd frontend
 pnpm install
 pnpm dev          # http://localhost:3000
-pnpm build        # 生产构建
 ```
 
-环境变量：`NEXT_PUBLIC_API_URL`（后端地址，默认 `http://localhost:8080`）
+环境变量：`NEXT_PUBLIC_API_URL`（后端地址，默认 `http://localhost:8080`），`NEXT_PUBLIC_WS_URL`（WebSocket 地址，默认 `ws://localhost:8080/ws`）
 
 ### 后端
 
 ```bash
 cd backend
-# 1. 创建 config.yaml（参考下方配置）
-# 2. 确保 MySQL 和 Redis 已启动
-# 3. 执行 scripts/migrations/ 中的 SQL 迁移
-go run ./cmd     # http://localhost:8080
+cp config.example.yaml config.yaml   # 编辑数据库和 JWT 配置
+go run ./cmd                          # http://localhost:8080
 ```
+
+**前置依赖：** MySQL + Redis 已启动，执行 `scripts/migrations/` SQL 脚本建表。
 
 **config.yaml 示例：**
 
@@ -71,45 +86,40 @@ jwt:
   expire_hours: 72
 ```
 
-### 格式化 & Lint
-
-```bash
-# 前端
-cd frontend && pnpm lint
-
-# 后端（工具在 $HOME/go/bin/）
-gofumpt -w . && goimports -w .
-golangci-lint run
-```
-
 ## 技术栈
 
 | 层 | 技术 |
 |----|------|
 | 前端框架 | Next.js 16 (React 19, TypeScript) |
 | UI 组件 | shadcn/ui + Tailwind CSS v4 |
-| 状态管理 | zustand |
-| 表单验证 | zod |
+| 状态管理 | zustand v5 |
+| 表单验证 | zod v4 |
 | HTTP 客户端 | axios |
-| 后端框架 | gin (Go) |
+| 后端框架 | gin v1.12 |
 | 数据库 | MySQL |
-| 缓存 | Redis |
+| 缓存 | Redis (go-redis/v9) |
 | 认证 | JWT + bcrypt |
+| 实时通信 | WebSocket (gorilla/websocket, auth frame) |
+| 头像 | DiceBear (micah) |
 
 ## API 端点
 
 | 方法 | 路径 | 认证 | 说明 |
 |------|------|------|------|
-| POST | `/api/auth/register` | 无 | 注册 |
+| POST | `/api/auth/register` | 无 | 注册（自动生成 DiceBear 头像） |
 | POST | `/api/auth/login` | 无 | 登录 |
-| GET | `/api/me` | JWT | 当前用户 |
+| GET | `/api/me` | JWT | 当前用户完整信息 |
 | GET | `/api/users?keyword=` | JWT | 搜索用户 |
-| POST | `/api/friends` | JWT | 添加好友 |
+| POST | `/api/friends` | JWT | 发送好友请求 |
 | GET | `/api/friends` | JWT | 好友列表 |
-| PUT | `/api/friends/:id/accept` | JWT | 接受请求 |
-| DELETE | `/api/friends/:id` | JWT | 删除好友 |
+| GET | `/api/friends/pending` | JWT | 待处理好友请求 |
+| PUT | `/api/friends/:id/accept` | JWT | 接受好友请求 |
+| DELETE | `/api/friends/:id` | JWT | 删除/拒绝好友 |
 | POST | `/api/messages` | JWT | 发送消息 |
-| GET | `/api/messages?friend_id=` | JWT | 聊天记录 |
+| GET | `/api/messages?friend_id=` | JWT | 聊天记录（分页） |
+| PUT | `/api/messages/read` | JWT | 标记已读 |
+| GET | `/ws` | auth frame | WebSocket 连接（实时推送） |
+| GET | `/ping` | 无 | 健康检查 |
 
 ## License
 

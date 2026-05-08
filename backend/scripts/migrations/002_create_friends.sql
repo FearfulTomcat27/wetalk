@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS `friends` (
+CREATE TABLE IF NOT EXISTS `friend_requests` (
     `id` BIGINT AUTO_INCREMENT PRIMARY KEY,
     `user_id` BIGINT NOT NULL,
     `friend_id` BIGINT NOT NULL,

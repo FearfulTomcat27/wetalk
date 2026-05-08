@@ -8,8 +8,8 @@ import { getAvatarSrc } from "@/lib/avatar";
 import type { Contact } from "@/types/chat";
 import { MessageCircle, UserPlus, Loader2, Check, X, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getPendingRequests, acceptFriendRequest, declineFriendRequest } from "@/lib/api";
-import type { PendingRequest } from "@/lib/api";
+import { getFriends, getPendingRequests, acceptFriendRequest, declineFriendRequest } from "@/lib/api";
+import type { PendingRequest, FriendInfo } from "@/lib/api";
 import { toast } from "sonner";
 
 // 宽度常量
@@ -18,48 +18,21 @@ const MIN_CONTACT_WIDTH = 200;
 const MAX_CONTACT_WIDTH = 480;
 const MIN_DETAIL_WIDTH = 300;
 
-// 模拟联系人数据（与 chat 共享）
-const mockContacts: Contact[] = [
-  {
-    id: 2,
-    username: "alice",
-    nickname: "Alice",
-    lastMessage: "好的，明天见！",
-    unread: 3,
-  },
-  {
-    id: 3,
-    username: "bob",
-    nickname: "Bob",
-    lastMessage: "那个项目进展如何？",
+/** 将后端 FriendInfo 映射为前端 Contact 类型 */
+function mapFriendToContact(f: FriendInfo): Contact {
+  return {
+    id: f.friend_id,
+    username: f.friend_name,
+    nickname: f.friend_name,
+    avatar: f.friend_avatar,
     unread: 0,
-  },
-  {
-    id: 4,
-    username: "carol",
-    nickname: "Carol",
-    lastMessage: "谢谢你的帮助 🙏",
-    unread: 1,
-  },
-  {
-    id: 5,
-    username: "dave",
-    nickname: "Dave",
-    lastMessage: "晚上一起吃饭吗？",
-    unread: 0,
-  },
-  {
-    id: 6,
-    username: "eve",
-    nickname: "Eve",
-    lastMessage: "文件我已经发你了",
-    unread: 5,
-  },
-];
+  };
+}
 
 export default function ContactsPage() {
   const router = useRouter();
-  const [contacts] = useState<Contact[]>(mockContacts);
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [contactsLoading, setContactsLoading] = useState(true);
   const [activeContactId, setActiveContactId] = useState<number | null>(null);
 
   // 新的朋友
@@ -75,6 +48,23 @@ export default function ContactsPage() {
   const containerRef = useRef<HTMLDivElement>(null);
 
   const activeContact = contacts.find((c) => c.id === activeContactId) ?? null;
+
+  // 加载好友列表
+  useEffect(() => {
+    async function load() {
+      setContactsLoading(true);
+      try {
+        const res = await getFriends();
+        const mapped: Contact[] = (res.data || []).map(mapFriendToContact);
+        setContacts(mapped);
+      } catch {
+        // 错误已在拦截器 toast
+      } finally {
+        setContactsLoading(false);
+      }
+    }
+    load();
+  }, []);
 
   // 点击「新的朋友」
   async function handleNewFriends() {
@@ -102,6 +92,9 @@ export default function ContactsPage() {
       await acceptFriendRequest(reqId);
       toast.success("已同意好友请求");
       setPendingRequests((prev) => prev.filter((r) => r.id !== reqId));
+      // 刷新好友列表
+      const fres = await getFriends();
+      setContacts((fres.data || []).map(mapFriendToContact));
     } catch {
       // 错误已在拦截器 toast
     } finally {
@@ -210,14 +203,20 @@ export default function ContactsPage() {
       <Sidebar />
 
       {/* 联系人列表 + 新的朋友 */}
-      <ContactList
-        contacts={contacts}
-        activeContactId={activeContactId}
-        onSelectContact={handleSelectContact}
-        style={{ width: contactWidth }}
-        variant="contacts"
-        headerContent={newFriendsHeader}
-      />
+      {contactsLoading ? (
+        <div className="flex items-center justify-center" style={{ width: contactWidth }}>
+          <Loader2 className="size-6 animate-spin text-muted-foreground" />
+        </div>
+      ) : (
+        <ContactList
+          contacts={contacts}
+          activeContactId={activeContactId}
+          onSelectContact={handleSelectContact}
+          style={{ width: contactWidth }}
+          variant="contacts"
+          headerContent={newFriendsHeader}
+        />
+      )}
 
       {/* 拖拽手柄 */}
       <div

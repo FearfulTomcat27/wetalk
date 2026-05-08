@@ -1,15 +1,18 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect, type MouseEvent as ReactMouseEvent } from "react";
+import { useSearchParams } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
 import { ContactList } from "@/components/ContactList";
 import { ChatArea } from "@/components/ChatArea";
 import { ChatInput } from "@/components/ChatInput";
 import { useChatStore } from "@/stores/chat";
-import type { Contact, Message } from "@/types/chat";
-
-// 模拟当前登录用户 ID（后续从 store 获取）
-const CURRENT_USER_ID = 1;
+import { useAuthStore } from "@/stores/auth";
+import { wsClient } from "@/lib/ws";
+import { getFriends, getMessages, markAsRead } from "@/lib/api";
+import type { FriendInfo } from "@/lib/api";
+import type { Contact } from "@/types/chat";
+import { Loader2 } from "lucide-react";
 
 // 宽度常量
 const DEFAULT_CONTACT_WIDTH = 280;
@@ -17,112 +20,142 @@ const MIN_CONTACT_WIDTH = 200;
 const MAX_CONTACT_WIDTH = 480;
 const MIN_CHAT_WIDTH = 300;
 
-// 模拟联系人数据
-const mockContacts: Contact[] = [
-  {
-    id: 2,
-    username: "alice",
-    nickname: "Alice",
-    lastMessage: "好的，明天见！",
-    unread: 3,
-  },
-  {
-    id: 3,
-    username: "bob",
-    nickname: "Bob",
-    lastMessage: "那个项目进展如何？",
-    unread: 0,
-  },
-  {
-    id: 4,
-    username: "carol",
-    nickname: "Carol",
-    lastMessage: "谢谢你的帮助 🙏",
-    unread: 1,
-  },
-  {
-    id: 5,
-    username: "dave",
-    nickname: "Dave",
-    lastMessage: "晚上一起吃饭吗？",
-    unread: 0,
-  },
-  {
-    id: 6,
-    username: "eve",
-    nickname: "Eve",
-    lastMessage: "文件我已经发你了",
-    unread: 5,
-  },
-];
-
-// 模拟消息数据
-const mockMessages: Record<number, Message[]> = {
-  2: [
-    { id: 1, contactId: 2, senderId: 2, content: "你好！", timestamp: Date.now() - 3600000 },
-    { id: 2, contactId: 2, senderId: 1, content: "你好 Alice！", timestamp: Date.now() - 3500000 },
-    { id: 3, contactId: 2, senderId: 2, content: "明天有空吗？", timestamp: Date.now() - 3400000 },
-    { id: 4, contactId: 2, senderId: 1, content: "有的，几点？", timestamp: Date.now() - 3300000 },
-    { id: 5, contactId: 2, senderId: 2, content: "下午三点可以吗？", timestamp: Date.now() - 3200000 },
-    { id: 6, contactId: 2, senderId: 1, content: "没问题 👌", timestamp: Date.now() - 3100000 },
-    { id: 7, contactId: 2, senderId: 2, content: "好的，明天见！", timestamp: Date.now() - 3000000 },
-  ],
-  3: [
-    { id: 8, contactId: 3, senderId: 3, content: "那个项目进展如何？", timestamp: Date.now() - 7200000 },
-  ],
-  4: [
-    { id: 9, contactId: 4, senderId: 4, content: "能帮我看下这个 bug 吗？", timestamp: Date.now() - 86400000 },
-    { id: 10, contactId: 4, senderId: 1, content: "当然，发我看看", timestamp: Date.now() - 86000000 },
-    { id: 11, contactId: 4, senderId: 4, content: "谢谢你的帮助 🙏", timestamp: Date.now() - 85000000 },
-  ],
-};
+function friendToContact(f: FriendInfo): Contact {
+  return {
+    id: f.friend_id,
+    username: f.friend_name,
+    nickname: f.friend_name,
+    avatar: f.friend_avatar,
+    lastMessage: f.last_message,
+    unread: f.unread_count ?? 0,
+  };
+}
 
 export default function ChatPage() {
-  const [contacts] = useState<Contact[]>(mockContacts);
-  const [activeContactId, setActiveContactId] = useState<number | null>(null);
-  const [messages, setMessages] = useState<Record<number, Message[]>>(mockMessages);
+  const searchParams = useSearchParams();
+  const currentUserId = useAuthStore((s) => s.user?.id);
+  const token = useAuthStore((s) => s.token);
+  const userFetched = useAuthStore((s) => s._userFetched);
 
-  // 拖拽状态
+  // Store 状态
+  const contacts = useChatStore((s) => s.contacts);
+  const activeContactId = useChatStore((s) => s.activeContactId);
+  const messages = useChatStore((s) => s.messages);
+  const inputTexts = useChatStore((s) => s.inputTexts);
+  const sending = useChatStore((s) => s.sending);
+  const connected = useChatStore((s) => s.connected);
+  const setContacts = useChatStore((s) => s.setContacts);
+  const selectContact = useChatStore((s) => s.selectContact);
+  const setInputText = useChatStore((s) => s.setInputText);
+  const sendMessage = useChatStore((s) => s.sendMessage);
+  const loadMessages = useChatStore((s) => s.loadMessages);
+  const receiveMessage = useChatStore((s) => s.receiveMessage);
+  const updateMessageStatus = useChatStore((s) => s.updateMessageStatus);
+  const setConnected = useChatStore((s) => s.setConnected);
+
+  // 仅保留 UI 相关的局部 state
+  const [contactsLoading, setContactsLoading] = useState(true);
+  const [messagesLoading, setMessagesLoading] = useState(false);
   const [contactWidth, setContactWidth] = useState(DEFAULT_CONTACT_WIDTH);
   const [dragging, setDragging] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
+  // 加载好友列表 → 写入 store
+  useEffect(() => {
+    async function load() {
+      setContactsLoading(true);
+      try {
+        const res = await getFriends();
+        setContacts((res.data || []).map(friendToContact));
+      } catch {
+        // 错误已在拦截器 toast
+      } finally {
+        setContactsLoading(false);
+      }
+    }
+    load();
+  }, [setContacts]);
+
+  // 通过 URL query param ?contact=xxx 自动选中联系人
+  useEffect(() => {
+    const contactParam = searchParams.get("contact");
+    if (contactParam && contacts.length > 0) {
+      const contactId = Number(contactParam);
+      if (!Number.isNaN(contactId) && contacts.some((c) => c.id === contactId)) {
+        selectContact(contactId);
+      }
+    }
+  }, [searchParams, contacts, selectContact]);
+
+  // 选中联系人时加载历史消息 → 写入 store
+  useEffect(() => {
+    if (activeContactId === null) {
+      return;
+    }
+    async function load() {
+      setMessagesLoading(true);
+      try {
+        const res = await getMessages(activeContactId!);
+        loadMessages(activeContactId!, (res.data || []).slice().reverse());
+      } catch {
+        // 错误已在拦截器 toast
+      } finally {
+        setMessagesLoading(false);
+      }
+    }
+    load();
+  }, [activeContactId, loadMessages]);
+
   // 选中联系人时自动聚焦输入框
   useEffect(() => {
     if (activeContactId !== null) {
-      // 等待 DOM 更新后聚焦
       setTimeout(() => inputRef.current?.focus(), 0);
     }
   }, [activeContactId]);
 
-  // 每个联系人的独立输入文本 → 切换联系人自动切换输入内容
-  const inputTexts = useChatStore((s) => s.inputTexts);
-  const setInputText = useChatStore((s) => s.setInputText);
-  const chatInputValue = activeContactId ? (inputTexts[activeContactId] ?? "") : "";
+  // WS 初始化：等 auth store _userFetched && token
+  useEffect(() => {
+    if (!userFetched || !token) {
+      return;
+    }
 
+    wsClient.connect();
+
+    const unsubNew = wsClient.on("message.new", (payload) => {
+      receiveMessage(payload as import("@/types/chat").Message);
+    });
+    const unsubSent = wsClient.on("message.sent", (payload) => {
+      const msg = payload as import("@/types/chat").Message;
+      if (msg.client_msg_id) {
+        updateMessageStatus(msg.client_msg_id, msg);
+      }
+    });
+    const unsubAuthOk = wsClient.on("auth.ok", () => {
+      setConnected(true);
+    });
+    const unsubDisconnect = wsClient.on("disconnect", () => {
+      setConnected(false);
+    });
+
+    return () => {
+      unsubNew();
+      unsubSent();
+      unsubAuthOk();
+      unsubDisconnect();
+      wsClient.disconnect();
+    };
+  }, [userFetched, token, receiveMessage, updateMessageStatus, setConnected]);
+
+  function handleSelectContact(id: number) {
+    selectContact(id);
+    markAsRead(id).catch(() => {});
+  }
+
+  const chatInputValue = activeContactId ? (inputTexts[activeContactId] ?? "") : "";
+  const isSending = activeContactId ? (sending[activeContactId] ?? false) : false;
   const activeContact = contacts.find((c) => c.id === activeContactId) ?? null;
   const activeMessages = activeContactId ? messages[activeContactId] ?? [] : [];
-
-  const handleSendMessage = useCallback(
-    (content: string) => {
-      if (!activeContactId) {return;}
-      const newMsg: Message = {
-        id: Date.now(),
-        contactId: activeContactId,
-        senderId: CURRENT_USER_ID,
-        content,
-        timestamp: Date.now(),
-      };
-      setMessages((prev) => ({
-        ...prev,
-        [activeContactId]: [...(prev[activeContactId] ?? []), newMsg],
-      }));
-      // 发送后清空该联系人的输入文本
-      setInputText(activeContactId, "");
-    },
-    [activeContactId, setInputText],
-  );
 
   // --- 拖拽处理 ---
   const handleMouseDown = useCallback((e: ReactMouseEvent) => {
@@ -136,11 +169,8 @@ export default function ChatPage() {
     function handleMouseMove(e: globalThis.MouseEvent) {
       if (!containerRef.current) {return;}
       const rect = containerRef.current.getBoundingClientRect();
-      // 鼠标位置相对于容器左边缘，减去 sidebar 宽度
       const sidebarWidth = 68;
       const newWidth = e.clientX - rect.left - sidebarWidth;
-
-      // 限制最小/最大宽度
       const maxWidth = Math.min(
         rect.width - sidebarWidth - MIN_CHAT_WIDTH,
         MAX_CONTACT_WIDTH,
@@ -154,7 +184,6 @@ export default function ChatPage() {
 
     document.addEventListener("mousemove", handleMouseMove);
     document.addEventListener("mouseup", handleMouseUp);
-    // 拖拽时防止选中文本
     document.body.style.userSelect = "none";
     document.body.style.cursor = "col-resize";
 
@@ -171,27 +200,28 @@ export default function ChatPage() {
       {/* 第一列：窄侧边栏 */}
       <Sidebar />
 
-      {/* 第二列：联系人列表（可拖拽调整宽度） */}
-      <ContactList
-        contacts={contacts}
-        activeContactId={activeContactId}
-        onSelectContact={setActiveContactId}
-        style={{ width: contactWidth }}
-        showAddFriend
-      />
+      {/* 第二列：联系人列表 */}
+      {contactsLoading ? (
+        <div className="flex items-center justify-center" style={{ width: contactWidth }}>
+          <Loader2 className="size-6 animate-spin text-muted-foreground" />
+        </div>
+      ) : (
+        <ContactList
+          contacts={contacts}
+          activeContactId={activeContactId}
+          onSelectContact={handleSelectContact}
+          style={{ width: contactWidth }}
+          showAddFriend
+        />
+      )}
 
       {/* 拖拽手柄 */}
       <div
         onMouseDown={handleMouseDown}
-        className={`relative shrink-0 cursor-col-resize transition-colors ${
-          dragging ? " bg-primary/10" : "hover:bg-primary/30"
-        }`}
+        className={`relative shrink-0 cursor-col-resize transition-colors ${dragging ? " bg-primary/10" : "hover:bg-primary/30"}`}
       >
-        {/* 拖拽指示线 */}
         <div
-          className={`absolute inset-y-0 left-1/2 w-px -translate-x-1/2 transition-colors ${
-            dragging ? "bg-primary/10" : "bg-border group-hover:bg-primary/40"
-          }`}
+          className={`absolute inset-y-0 left-1/2 w-px -translate-x-1/2 transition-colors ${dragging ? "bg-primary/10" : "bg-border group-hover:bg-primary/40"}`}
         />
       </div>
 
@@ -199,7 +229,6 @@ export default function ChatPage() {
       <div className="flex flex-1 flex-col overflow-hidden bg-muted/30">
         {activeContact ? (
           <>
-            {/* 聊天头部 */}
             <div className="flex h-14 shrink-0 items-center bg-card px-4">
               <div className="flex flex-col">
                 <p className="text-sm font-medium">{activeContact.nickname}</p>
@@ -207,27 +236,35 @@ export default function ChatPage() {
                   @{activeContact.username}
                 </p>
               </div>
+              {!connected && (
+                <span className="ml-2 text-xs text-muted-foreground/60">（离线模式）</span>
+              )}
             </div>
 
-            {/* 消息列表 */}
-            <ChatArea
-              messages={activeMessages}
-              currentUserId={CURRENT_USER_ID}
-              contactName={activeContact.nickname}
-              contactUsername={activeContact.username}
-              contactAvatar={activeContact.avatar}
-            />
+            {messagesLoading ? (
+              <div className="flex flex-1 items-center justify-center">
+                <Loader2 className="size-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <ChatArea
+                messages={activeMessages}
+                currentUserId={currentUserId ?? 0}
+                contactName={activeContact.nickname}
+                contactUsername={activeContact.username}
+                contactAvatar={activeContact.avatar}
+              />
+            )}
 
-            {/* 输入框 */}
             <ChatInput
               ref={inputRef}
               value={chatInputValue}
+              disabled={isSending}
               onChange={(text) => {
                 if (activeContactId !== null) {
                   setInputText(activeContactId, text);
                 }
               }}
-              onSend={handleSendMessage}
+              onSend={sendMessage}
             />
           </>
         ) : (

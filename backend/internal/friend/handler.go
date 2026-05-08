@@ -58,6 +58,10 @@ func (h *Handler) List(c *gin.Context) {
 		return
 	}
 
+	if friends == nil {
+		friends = []FriendshipInfo{}
+	}
+
 	utils.Success(c, http.StatusOK, "成功", friends)
 }
 
@@ -90,6 +94,23 @@ func (h *Handler) Accept(c *gin.Context) {
 	}
 
 	utils.Success(c, http.StatusOK, "已接受好友请求", nil)
+}
+
+// PendingRequests 获取待处理的好友请求
+func (h *Handler) PendingRequests(c *gin.Context) {
+	userID := c.GetInt64("user_id")
+
+	requests, err := h.svc.GetPendingRequests(userID)
+	if err != nil {
+		utils.Error(c, http.StatusInternalServerError, "获取待处理请求失败")
+		return
+	}
+
+	if requests == nil {
+		requests = []PendingRequest{}
+	}
+
+	utils.Success(c, http.StatusOK, "成功", requests)
 }
 
 // Delete 删除好友

@@ -1,6 +1,7 @@
 package user
 
 import (
+	"net/url"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -65,8 +66,11 @@ func (s *Service) Register(req RegisterRequest) (*AuthResponse, error) {
 		nickname = req.Username
 	}
 
+	// 生成 DiceBear 默认头像
+	avatar := "https://api.dicebear.com/9.x/micah/svg?seed=" + url.QueryEscape(req.Username)
+
 	// 创建用户
-	user, err := Repository.Create(req.Username, string(hashedPassword), nickname)
+	user, err := Repository.Create(req.Username, string(hashedPassword), nickname, avatar)
 	if err != nil {
 		return nil, err
 	}
@@ -111,6 +115,11 @@ func (s *Service) Login(req LoginRequest) (*AuthResponse, error) {
 		Token: token,
 		User:  user,
 	}, nil
+}
+
+// GetUserByID 根据 ID 获取用户信息
+func (s *Service) GetUserByID(id int64) (*User, error) {
+	return Repository.FindByID(id)
 }
 
 // SearchUsers 搜索用户
