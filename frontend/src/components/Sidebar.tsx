@@ -1,21 +1,16 @@
 "use client";
 
-import { useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useAuthStore } from "@/stores/auth";
 import { MessageCircle, Users, LogOut } from "lucide-react";
-import { getAvatarSrc } from "@/lib/avatar";
+import { Avatar } from "@/components/Avatar";
+import { ProfilePopover } from "@/components/ProfilePopover";
 
 export function Sidebar() {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const router = useRouter();
   const pathname = usePathname();
-  const [avatarError, setAvatarError] = useState(false);
-
-  const initial = (user?.nickname || user?.username || "?").charAt(0).toUpperCase();
-  const username = user?.username ?? "me";
-  const showAvatarImg = !avatarError;
 
   const isChatActive = pathname === "/chat";
   const isContactsActive = pathname === "/contacts";
@@ -35,7 +30,7 @@ export function Sidebar() {
       onClick={() => router.push(href)}
       className={`flex size-10 items-center justify-center rounded-xl transition-colors ${
         active
-          ? "bg-primary/10 text-primary"
+          ? "text-[#3b82f6]"
           : "text-muted-foreground hover:bg-muted hover:text-foreground"
       }`}
       title={label}
@@ -50,25 +45,17 @@ export function Sidebar() {
       <div className="flex flex-col items-center gap-2">
         {user ? (
           <>
-            {showAvatarImg ? (
-              <img
-                src={getAvatarSrc(user?.avatar, username)}
-                alt={user.nickname || user.username}
-                onError={() => setAvatarError(true)}
-                className="size-10 shrink-0 rounded-full object-cover ring-2 ring-border"
+            <ProfilePopover>
+              <Avatar
+                src={user.avatar}
+                alt={user?.nickname || user?.username || "?"}
+                size={36}
               />
-            ) : (
-              <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/15 text-sm font-semibold text-primary ring-2 ring-border">
-                {initial}
-              </div>
-            )}
-            <span className="max-w-[60px] truncate text-center text-[11px] font-medium leading-tight text-muted-foreground">
-              {user.nickname || user.username}
-            </span>
+            </ProfilePopover>
           </>
         ) : (
           <>
-            <div className="size-10 shrink-0 animate-pulse rounded-full bg-muted" />
+            <div className="size-10 shrink-0 animate-pulse rounded-lg bg-muted" />
             <span className="h-3 w-12 animate-pulse rounded bg-muted" />
           </>
         )}

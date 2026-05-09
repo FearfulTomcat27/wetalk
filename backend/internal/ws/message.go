@@ -9,7 +9,7 @@ const (
 	TypeMessageSent = "message.sent"
 	TypeMessageNew  = "message.new"
 	TypePong        = "pong"
-	TypePing         = "ping"
+	TypePing        = "ping"
 	TypeError       = "error"
 )
 

@@ -7,7 +7,7 @@ export { login, register, fetchCurrentUser } from "./auth";
 export type { LoginRequest, RegisterRequest, AuthResponse } from "./auth";
 
 // 用户
-export { searchUsers } from "./users";
+export { searchUsers, uploadAvatar } from "./users";
 export type { UserInfo } from "./users";
 
 // 好友

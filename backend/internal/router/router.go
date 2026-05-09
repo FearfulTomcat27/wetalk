@@ -67,35 +67,12 @@ func registerAPIRoutes(r *gin.Engine, jwtSecret string, uh *user.Handler, fh *fr
 	api.Use(middleware.AuthMiddleware(jwtSecret))
 	{
 		// 当前用户
-		api.GET("/me", uh.Me)
-
-		// 用户搜索
-		api.GET("/users", uh.Search)
+		registerUserRoutes(api, uh)
 
 		// 好友管理
 		registerFriendRoutes(api, fh)
 
 		// 消息管理
 		registerMessageRoutes(api, mh)
-	}
-}
-
-func registerFriendRoutes(api *gin.RouterGroup, h *friend.Handler) {
-	friends := api.Group("/friends")
-	{
-		friends.POST("", h.Add)
-		friends.GET("/pending", h.PendingRequests)
-		friends.GET("", h.List)
-		friends.PUT("/:id/accept", h.Accept)
-		friends.DELETE("/:id", h.Delete)
-	}
-}
-
-func registerMessageRoutes(api *gin.RouterGroup, h *message.Handler) {
-	messages := api.Group("/messages")
-	{
-		messages.POST("", h.Send)
-		messages.GET("", h.List)
-		messages.PUT("/read", h.Read)
 	}
 }

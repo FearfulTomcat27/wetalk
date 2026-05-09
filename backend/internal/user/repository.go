@@ -65,3 +65,8 @@ func (r *repository) Create(username, passwordHash, nickname, avatar string) (*U
 	}
 	return user, nil
 }
+
+// UpdateAvatar 更新用户头像 URL
+func (r *repository) UpdateAvatar(userID int64, avatarURL string) error {
+	return db.DB.Model(&User{}).Where("id = ?", userID).Update("avatar", avatarURL).Error
+}

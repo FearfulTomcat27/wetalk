@@ -1,26 +1,34 @@
 package user
 
 import (
+	"context"
+	"fmt"
+	"io"
 	"net/url"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 
 	pkgerrors "wetalk/pkg/errors"
+	"wetalk/pkg/oss"
 )
 
 // Service 用户业务逻辑
 type Service struct {
 	jwtSecret      string
 	jwtExpireHours int
+	ossClient      *oss.Client
 }
 
 // NewService 创建用户业务逻辑服务
-func NewService(jwtSecret string, jwtExpireHours int) *Service {
+func NewService(jwtSecret string, jwtExpireHours int, ossClient *oss.Client) *Service {
 	return &Service{
 		jwtSecret:      jwtSecret,
 		jwtExpireHours: jwtExpireHours,
+		ossClient:      ossClient,
 	}
 }
 
@@ -141,4 +149,44 @@ func (s *Service) generateToken(u *User) (string, error) {
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(s.jwtSecret))
+}
+
+// UploadAvatar 上传头像
+func (s *Service) UploadAvatar(ctx context.Context, userID int64, file io.Reader, filename string, size int64) (string, error) {
+	// 校验文件大小 ≤ 2MB
+	if size > 2*1024*1024 {
+		return "", pkgerrors.ErrInvalidParam
+	}
+
+	// 校验文件扩展名（忽略大小写）
+	ext := strings.ToLower(filepath.Ext(filename))
+	contentType := ""
+	switch ext {
+	case ".jpg", ".jpeg":
+		contentType = "image/jpeg"
+	case ".png":
+		contentType = "image/png"
+	case ".gif":
+		contentType = "image/gif"
+	case ".webp":
+		contentType = "image/webp"
+	default:
+		return "", pkgerrors.ErrInvalidParam
+	}
+
+	// 生成 OSS key: avatars/{uid}/{uuid}.{ext}
+	objectKey := fmt.Sprintf("avatars/%d/%d%s", userID, time.Now().UnixNano(), ext)
+
+	// 上传到 OSS (ACL=public-read)
+	avatarURL, err := s.ossClient.PutObject(ctx, objectKey, file, contentType, size)
+	if err != nil {
+		return "", err
+	}
+
+	// 更新 DB
+	if err := Repository.UpdateAvatar(userID, avatarURL); err != nil {
+		return "", err
+	}
+
+	return avatarURL, nil
 }

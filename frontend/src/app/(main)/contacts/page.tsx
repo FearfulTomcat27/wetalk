@@ -2,9 +2,8 @@
 
 import { useState, useRef, useCallback, useEffect, type MouseEvent as ReactMouseEvent } from "react";
 import { useRouter } from "next/navigation";
-import { Sidebar } from "@/components/Sidebar";
 import { ContactList } from "@/components/ContactList";
-import { getAvatarSrc } from "@/lib/avatar";
+import { Avatar } from "@/components/Avatar";
 import type { Contact } from "@/types/chat";
 import { MessageCircle, UserPlus, Loader2, Check, X, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -139,9 +138,8 @@ export default function ContactsPage() {
     function handleMouseMove(e: globalThis.MouseEvent) {
       if (!containerRef.current) {return;}
       const rect = containerRef.current.getBoundingClientRect();
-      const sidebarWidth = 68;
-      const newWidth = e.clientX - rect.left - sidebarWidth;
-      const maxWidth = Math.min(rect.width - sidebarWidth - MIN_DETAIL_WIDTH, MAX_CONTACT_WIDTH);
+      const newWidth = e.clientX - rect.left;
+      const maxWidth = Math.min(rect.width - MIN_DETAIL_WIDTH, MAX_CONTACT_WIDTH);
       setContactWidth(Math.min(Math.max(newWidth, MIN_CONTACT_WIDTH), maxWidth));
     }
 
@@ -179,14 +177,14 @@ export default function ContactsPage() {
       onClick={handleNewFriends}
       className={cn(
         "mx-2 flex items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors",
-        showPending ? "bg-primary/10" : "hover:bg-muted/70",
+        showPending ? "bg-[#3b82f6] text-white" : "hover:bg-muted/70 text-foreground",
       )}
     >
-      <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-primary/10">
-        <UserPlus className="size-5 text-primary" />
+      <div className={cn("flex size-[36px] shrink-0 items-center justify-center rounded-lg shadow-[0_2px_6px_rgba(0,0,0,0.14)]", showPending ? "bg-[#3b82f6] text-white" : "bg-[#3b82f6]/15 text-[#3b82f6]")}>
+        <UserPlus className="size-5" />
       </div>
       <div className="min-w-0 flex-1">
-        <p className={cn("text-sm font-medium", showPending ? "text-primary" : "text-foreground")}>
+        <p className="text-sm font-medium">
           新的朋友
         </p>
         {pendingCount > 0 && (
@@ -200,8 +198,6 @@ export default function ContactsPage() {
 
   return (
     <div ref={containerRef} className="flex flex-1 overflow-hidden">
-      <Sidebar />
-
       {/* 联系人列表 + 新的朋友 */}
       {contactsLoading ? (
         <div className="flex items-center justify-center" style={{ width: contactWidth }}>
@@ -260,10 +256,11 @@ export default function ContactsPage() {
                       className="flex items-center gap-3 rounded-lg px-3 py-3 transition-colors hover:bg-muted/50"
                     >
                       {/* 头像 */}
-                      <img
-                        src={getAvatarSrc(req.user.avatar, req.user.username)}
-                        alt={req.user.nickname}
-                        className="size-11 shrink-0 rounded-full object-cover"
+                      <Avatar
+                        src={req.user.avatar}
+                        alt={req.user.nickname || req.user.username}
+                        size={36}
+                        className="ring-2 ring-border"
                       />
 
                       {/* 信息 */}
@@ -304,10 +301,11 @@ export default function ContactsPage() {
         ) : activeContact ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-6 px-6 py-12">
             {/* 头像 */}
-            <img
-              src={getAvatarSrc(activeContact.avatar, activeContact.username)}
-              alt={activeContact.nickname}
-              className="size-24 rounded-full object-cover shadow-lg ring-4 ring-border"
+            <Avatar
+              src={activeContact.avatar}
+              alt={activeContact.nickname || activeContact.username}
+              size={36}
+              className="ring-4 ring-border"
             />
 
             {/* 信息 */}

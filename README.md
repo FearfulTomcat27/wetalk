@@ -15,6 +15,7 @@
 - 好友请求待处理通知
 - 全局路由守卫（登录/未登录自动跳转）
 - DiceBear 头像自动生成
+- 用户头像上传（阿里云 OSS 存储，支持 jpg/png/gif/webp，≤2MB）
 - 联系人列表与聊天区域支持拖拽调整宽度
 
 ## 项目结构
@@ -34,7 +35,7 @@ wetalk/
 │   ├── internal/                # 业务模块 (router, user, friend, message, ws, middleware)
 │   ├── config/                  # 配置加载
 │   ├── db/                      # MySQL + Redis 连接
-│   ├── pkg/                     # 公共包 (errors, utils)
+│   ├── pkg/                     # 公共包 (errors, utils, oss)
 │   └── scripts/migrations/      # SQL 迁移
 └── CLAUDE.md                    # AI 助手指南
 ```
@@ -84,6 +85,13 @@ redis:
 jwt:
   secret: "your-jwt-secret"
   expire_hours: 72
+
+oss:
+  endpoint: "oss-cn-shanghai.aliyuncs.com"
+  bucket: "your-bucket-name"
+  region: "cn-shanghai"
+  access_key_id: "your-access-key-id"
+  access_key_secret: "your-access-key-secret"
 ```
 
 ## 技术栈
@@ -100,7 +108,7 @@ jwt:
 | 缓存 | Redis (go-redis/v9) |
 | 认证 | JWT + bcrypt |
 | 实时通信 | WebSocket (gorilla/websocket, auth frame) |
-| 头像 | DiceBear (micah) |
+| 头像 | DiceBear (micah) + 阿里云 OSS |
 
 ## API 端点
 
@@ -109,6 +117,7 @@ jwt:
 | POST | `/api/auth/register` | 无 | 注册（自动生成 DiceBear 头像） |
 | POST | `/api/auth/login` | 无 | 登录 |
 | GET | `/api/me` | JWT | 当前用户完整信息 |
+| POST | `/api/me/avatar` | JWT | 上传头像（multipart/form-data，≤2MB） |
 | GET | `/api/users?keyword=` | JWT | 搜索用户 |
 | POST | `/api/friends` | JWT | 发送好友请求 |
 | GET | `/api/friends` | JWT | 好友列表 |

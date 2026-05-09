@@ -165,13 +165,14 @@ func (r *repository) FindPendingByUserID(userID int64) ([]PendingRequest, error)
 
 // FriendshipInfo 好友信息（从 friendships 表查询，JOIN users 获取对方信息）
 type FriendshipInfo struct {
-	ID           int64  `json:"id"`
-	FriendID     int64  `json:"friend_id"`
-	FriendName   string `json:"friend_name"`
-	FriendAvatar string `json:"friend_avatar"`
-	LastMessage  string `json:"last_message"`
-	UnreadCount  int    `json:"unread_count"`
-	CreatedAt    string `json:"created_at"`
+	ID              int64  `json:"id"`
+	FriendID        int64  `json:"friend_id"`
+	FriendName      string `json:"friend_name"`
+	FriendAvatar    string `json:"friend_avatar"`
+	LastMessage     string `json:"last_message"`
+	LastMessageTime string `json:"last_message_time"`
+	UnreadCount     int    `json:"unread_count"`
+	CreatedAt       string `json:"created_at"`
 }
 
 // CreateFriendship 创建好友关系（小 ID 在前，防重）
@@ -198,6 +199,10 @@ func (r *repository) FindFriendships(userID int64) ([]FriendshipInfo, error) {
 		         WHERE ((sender_id = friendships.user1_id AND receiver_id = friendships.user2_id)
 		             OR (sender_id = friendships.user2_id AND receiver_id = friendships.user1_id))
 		         ORDER BY created_at DESC LIMIT 1), '') AS last_message,
+		        COALESCE((SELECT created_at FROM messages
+		         WHERE ((sender_id = friendships.user1_id AND receiver_id = friendships.user2_id)
+		             OR (sender_id = friendships.user2_id AND receiver_id = friendships.user1_id))
+		         ORDER BY created_at DESC LIMIT 1), '') AS last_message_time,
 		        (SELECT COUNT(*) FROM messages
 		         WHERE receiver_id = ?
 		           AND sender_id = CASE WHEN friendships.user1_id = ? THEN friendships.user2_id ELSE friendships.user1_id END

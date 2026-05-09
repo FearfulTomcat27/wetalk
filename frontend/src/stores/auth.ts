@@ -18,7 +18,7 @@ interface AuthState {
   _hydrated: boolean;
   /** user 信息是否已加载完成（含 fetchUser 成功/失败/无需加载） */
   _userFetched: boolean;
-
+  
   init: () => void;
   login: (data: LoginRequest) => Promise<void>;
   register: (data: RegisterRequest) => Promise<void>;
@@ -26,6 +26,7 @@ interface AuthState {
   fetchUser: () => Promise<void>;
   clearError: () => void;
   setUser: (user: User, token: string) => void;
+  updateAvatar: (avatarUrl: string) => void;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -35,7 +36,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   error: null,
   _hydrated: false,
   _userFetched: false,
-
+  
   init: () => {
     // 防止重复初始化
     if (get()._hydrated) {
@@ -122,5 +123,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   setUser: (user: User, token: string) => {
     localStorage.setItem("token", token);
     set({ user, token });
+  },
+
+  updateAvatar: (avatarUrl: string) => {
+    const user = get().user;
+    if (user) {
+      set({ user: { ...user, avatar: avatarUrl } });
+    }
   },
 }));

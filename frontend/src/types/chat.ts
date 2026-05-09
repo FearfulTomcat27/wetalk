@@ -4,6 +4,7 @@ export interface Contact {
   nickname: string;
   avatar?: string;
   lastMessage?: string;
+  lastMessageTime?: string;
   unread: number;
 }
 

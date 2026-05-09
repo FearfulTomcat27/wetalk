@@ -17,6 +17,7 @@ interface ChatState {
 
   setContacts: (contacts: Contact[]) => void;
   selectContact: (id: number) => void;
+  setActiveContactId: (id: number) => void;
   setInputText: (contactId: number, text: string) => void;
   sendMessage: () => void;
   addContact: (contact: Contact) => void;
@@ -45,6 +46,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
         c.id === id ? { ...c, unread: 0 } : c
       ),
     }));
+  },
+
+  setActiveContactId: (id: number) => {
+    set({ activeContactId: id });
   },
 
   setInputText: (contactId: number, text: string) => {
@@ -84,7 +89,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         ],
       },
       contacts: contacts.map((c) =>
-        c.id === activeContactId ? { ...c, lastMessage: text } : c
+        c.id === activeContactId ? { ...c, lastMessage: text, lastMessageTime: new Date().toISOString() } : c
       ),
       inputTexts: { ...state.inputTexts, [activeContactId]: "" },
     }));
@@ -145,7 +150,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         },
         contacts: state.contacts.map((c) =>
           c.id === msg.sender_id
-            ? { ...c, lastMessage: msg.content, unread: isActive ? c.unread : c.unread + 1 }
+            ? { ...c, lastMessage: msg.content, lastMessageTime: msg.created_at, unread: isActive ? c.unread : c.unread + 1 }
             : c
         ),
       };

@@ -80,7 +80,12 @@ wetalk/
 │   └── scripts/migrations/      # SQL 迁移 (users/friends/messages 表)
 ```
 
-## Key Conventions
+## Code Formatting (必须在完成功能代码后执行)
+
+完成任何功能代码编写后，必须运行对应项目的格式化命令，确保代码风格一致：
+
+- **后端**：`gofumpt -w .` 和 `goimports -w .`（工具在 `$HOME/go/bin/`）
+- **前端**：`pnpm lint --fix`（ESLint 自动修复）
 
 ### Next.js 16
 - 先读 `node_modules/next/dist/docs/` 指南，API 与训练数据可能不同。

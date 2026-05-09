@@ -10,6 +10,9 @@ import (
 	"wetalk/pkg/utils"
 )
 
+// maxAvatarSize 头像文件最大 2MB
+const maxAvatarSize = 2 << 20
+
 // Handler 用户 HTTP 处理器
 type Handler struct {
 	svc *Service
@@ -95,4 +98,33 @@ func (h *Handler) Search(c *gin.Context) {
 		users = []User{}
 	}
 	utils.Success(c, http.StatusOK, "成功", users)
+}
+
+// UploadAvatar 上传头像
+func (h *Handler) UploadAvatar(c *gin.Context) {
+	userID := c.GetInt64("user_id")
+
+	file, header, err := c.Request.FormFile("file")
+	if err != nil {
+		utils.Error(c, http.StatusBadRequest, "请选择头像文件")
+		return
+	}
+	defer file.Close()
+
+	if header.Size > maxAvatarSize {
+		utils.Error(c, http.StatusBadRequest, "头像文件不能超过 2MB")
+		return
+	}
+
+	avatarURL, err := h.svc.UploadAvatar(c.Request.Context(), userID, file, header.Filename, header.Size)
+	if err != nil {
+		if errors.Is(err, pkgerrors.ErrInvalidParam) {
+			utils.Error(c, http.StatusBadRequest, "仅支持 jpg/png/gif/webp 格式")
+			return
+		}
+		utils.Error(c, http.StatusInternalServerError, "上传头像失败")
+		return
+	}
+
+	utils.Success(c, http.StatusOK, "上传成功", gin.H{"avatar": avatarURL})
 }

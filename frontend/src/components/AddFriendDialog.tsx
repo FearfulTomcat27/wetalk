@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef } from "react";
 import { Search, UserPlus, Loader2 } from "lucide-react";
+import { Avatar } from "@/components/Avatar";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -11,7 +12,6 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { searchUsers, addFriend, ApiError } from "@/lib/api";
-import { getAvatarSrc } from "@/lib/avatar";
 import type { UserInfo } from "@/lib/api";
 
 interface AddFriendDialogProps {
@@ -26,7 +26,6 @@ export function AddFriendDialog({ open, onOpenChange }: AddFriendDialogProps) {
   const [searched, setSearched] = useState(false);
   const [addingIds, setAddingIds] = useState<Set<number>>(new Set());
   const [addedIds, setAddedIds] = useState<Set<number>>(new Set());
-  const [avatarErrors, setAvatarErrors] = useState<Set<number>>(new Set());
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleSearch = useCallback(
@@ -41,7 +40,6 @@ export function AddFriendDialog({ open, onOpenChange }: AddFriendDialogProps) {
         setResults([]);
         setSearched(false);
         setAddedIds(new Set());
-        setAvatarErrors(new Set());
         return;
       }
 
@@ -49,7 +47,6 @@ export function AddFriendDialog({ open, onOpenChange }: AddFriendDialogProps) {
         setLoading(true);
         setSearched(true);
         setAddedIds(new Set());
-        setAvatarErrors(new Set());
         try {
           const res = await searchUsers(value.trim());
           setResults(res.data || []);
@@ -136,24 +133,11 @@ export function AddFriendDialog({ open, onOpenChange }: AddFriendDialogProps) {
                   className="flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors hover:bg-muted/60"
                 >
                   {/* 头像 */}
-                  {avatarErrors.has(user.id) ? (
-                    <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
-                      {(user.nickname || user.username).charAt(0).toUpperCase()}
-                    </div>
-                  ) : (
-                    <img
-                      src={getAvatarSrc(user.avatar, user.username)}
-                      alt={user.nickname || user.username}
-                      onError={() =>
-                        setAvatarErrors((prev) => {
-                          const next = new Set(prev);
-                          next.add(user.id);
-                          return next;
-                        })
-                      }
-                      className="size-10 shrink-0 rounded-full object-cover"
-                    />
-                  )}
+                  <Avatar
+                    src={user.avatar}
+                    alt={user.nickname || user.username}
+                    size={36}
+                  />
 
                   {/* 信息 */}
                   <div className="min-w-0 flex-1">

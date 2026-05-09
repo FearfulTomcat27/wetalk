@@ -1,13 +1,14 @@
 import { request } from "./request";
 import type { UserInfo } from "./users";
 
-/** 好友信息 — 匹配后端 { friend_id, friend_name, friend_avatar, created_at, last_message, unread_count } */
+/** 好友信息 — 匹配后端 { friend_id, friend_name, friend_avatar, created_at, last_message, last_message_time, unread_count } */
 export interface FriendInfo {
   friend_id: number;
   friend_name: string;
   friend_avatar?: string;
   created_at?: string;
   last_message?: string;
+  last_message_time?: string;
   unread_count?: number;
 }
 

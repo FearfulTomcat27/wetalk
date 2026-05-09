@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import type { Message } from "@/types/chat";
 import { cn } from "@/lib/utils";
-import { getAvatarSrc } from "@/lib/avatar";
+import { Avatar } from "@/components/Avatar";
 import { useAuthStore } from "@/stores/auth";
 
 interface ChatAreaProps {
@@ -53,13 +53,11 @@ export function ChatArea({ messages, currentUserId, contactName, contactUsername
   const prevCountRef = useRef(messages.length);
 
   const user = useAuthStore((s) => s.user);
-  const [selfAvatarError, setSelfAvatarError] = useState(false);
-  const [otherAvatarError, setOtherAvatarError] = useState(false);
 
   const selfUsername = user?.username ?? "me";
   const otherUsername = contactUsername ?? contactName ?? "?";
-  const otherInitial = (contactName || "?").charAt(0).toUpperCase();
 
+  
   // 新消息到达时自动滚动到底部
   useEffect(() => {
     const isNew = messages.length > prevCountRef.current;
@@ -107,11 +105,10 @@ export function ChatArea({ messages, currentUserId, contactName, contactUsername
       ref={scrollRef}
       className="flex-1 overflow-y-auto px-4 py-3"
     >
-      <div className="mx-auto space-y-0.5">
+      <div className="mx-auto">
         {messages.map((msg, index) => {
           const isSelf = msg.sender_id === currentUserId;
           const showTime = shouldShowTime(messages, index);
-          const initial = contactName?.charAt(0).toUpperCase() || "?";
 
           return (
             <div key={msg.id}>
@@ -127,51 +124,52 @@ export function ChatArea({ messages, currentUserId, contactName, contactUsername
               {/* 消息行 */}
               <div
                 className={cn(
-                  "flex animate-message-in items-end gap-2",
+                  "flex animate-message-in items-start gap-2.5 mb-4",
                   isSelf ? "flex-row-reverse" : "flex-row",
                 )}
               >
                 {/* 头像 */}
-                <div className="mb-0.5 shrink-0">
-                  {isSelf ? (
-                    selfAvatarError ? (
-                      <div className="flex size-8 items-center justify-center rounded-full bg-primary/15 text-xs font-semibold text-primary" title="我">
-                        我
-                      </div>
-                    ) : (
-                      <img
-                        src={getAvatarSrc(user?.avatar, selfUsername)}
-                        alt="我"
-                        onError={() => setSelfAvatarError(true)}
-                        className="size-8 rounded-full object-cover"
-                      />
-                    )
-                  ) : otherAvatarError ? (
-                    <div className="flex size-8 items-center justify-center rounded-full bg-muted text-xs font-semibold text-muted-foreground" title={contactName}>
-                      {otherInitial}
-                    </div>
-                  ) : (
-                    <img
-                      src={getAvatarSrc(contactAvatar, otherUsername)}
-                      alt={contactName || "?"}
-                      onError={() => setOtherAvatarError(true)}
-                      className="size-8 rounded-full object-cover"
-                    />
-                  )}
-                </div>
+                <Avatar
+                  src={isSelf ? user?.avatar : contactAvatar}
+                  alt={isSelf ? selfUsername : otherUsername}
+                  fallbackInitial={isSelf ? "我" : contactName?.[0]?.toUpperCase() || "?"}
+                  size={36}
+                />
 
                 {/* 气泡 */}
-                <div
-                  className={cn(
-                    "group relative max-w-[68%] px-4 py-2.5 text-sm leading-relaxed shadow-sm transition-shadow hover:shadow-md",
-                    isSelf
-                      ? "rounded-2xl rounded-br-md bg-[#95EC69] text-black"
-                      : "rounded-2xl rounded-bl-md bg-card text-foreground",
+                <div className="relative max-w-[62%]">
+                  <div
+                    className={cn(
+                      "rounded-md px-3.5 py-2 text-sm leading-normal break-words whitespace-pre-wrap shadow-md",
+                      isSelf
+                        ? "bg-[#3b82f6] text-white"
+                        : "bg-[#eeeef0] text-gray-900",
+                    )}
+                  >
+                    <p>{msg.content}</p>
+                  </div>
+                  {/* 曲线箭头 — 与头像居中对齐 */}
+                  {isSelf ? (
+                    <svg
+                      className="absolute"
+                      width="5"
+                      height="15"
+                      viewBox="0 0 5 15"
+                      style={{ right: -5, top: 11 }}
+                    >
+                      <path d="M 0,0 C 0,3 5,5.5 5,7.5 C 5,9.5 0,12 0,15" fill="#3b82f6" />
+                    </svg>
+                  ) : (
+                    <svg
+                      className="absolute"
+                      width="5"
+                      height="15"
+                      viewBox="0 0 5 15"
+                      style={{ left: -5, top: 11 }}
+                    >
+                      <path d="M 5,0 C 5,3 0,5.5 0,7.5 C 0,9.5 5,12 5,15" fill="#eeeef0" />
+                    </svg>
                   )}
-                >
-                  <p className="whitespace-pre-wrap break-words">
-                    {msg.content}
-                  </p>
                 </div>
               </div>
             </div>

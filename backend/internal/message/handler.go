@@ -8,15 +8,15 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"wetalk/internal/ws"
 	pkgerrors "wetalk/pkg/errors"
 	"wetalk/pkg/utils"
-	"wetalk/internal/ws"
 )
 
 // Handler 消息 HTTP 处理器
 type Handler struct {
-	svc      *Service
-	hub      *ws.Hub
+	svc *Service
+	hub *ws.Hub
 }
 
 // NewHandler 创建消息处理器

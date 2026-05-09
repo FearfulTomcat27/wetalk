@@ -11,6 +11,7 @@ type Config struct {
 	Database DatabaseConfig `yaml:"database"`
 	JWT      JWTConfig      `yaml:"jwt"`
 	Redis    RedisConfig    `yaml:"redis"`
+	OSS      OSSConfig      `yaml:"oss"`
 }
 
 // DatabaseConfig 数据库配置
@@ -38,6 +39,15 @@ type RedisConfig struct {
 	Password string `yaml:"password"`
 	DB       int    `yaml:"db"`
 	PoolSize int    `yaml:"pool_size"`
+}
+
+// OSSConfig 阿里云 OSS 配置
+type OSSConfig struct {
+	Endpoint        string `yaml:"endpoint"`
+	Bucket          string `yaml:"bucket"`
+	Region          string `yaml:"region"`
+	AccessKeyID     string `yaml:"access_key_id"`
+	AccessKeySecret string `yaml:"access_key_secret"`
 }
 
 // Load 从文件加载配置

@@ -16,6 +16,7 @@ import (
 	"wetalk/internal/router"
 	"wetalk/internal/user"
 	"wetalk/internal/ws"
+	"wetalk/pkg/oss"
 )
 
 func main() {
@@ -41,9 +42,12 @@ func main() {
 	hub := ws.NewHub()
 	go hub.Run()
 
+	// 初始化 OSS 客户端
+	ossClient := oss.NewClient(cfg.OSS)
+
 	// 创建服务
 	msgSvc := message.NewService()
-	userSvc := user.NewService(cfg.JWT.Secret, cfg.JWT.ExpireHours)
+	userSvc := user.NewService(cfg.JWT.Secret, cfg.JWT.ExpireHours, ossClient)
 	friendSvc := friend.NewService()
 
 	// WS 发送消息回调（桥接 ws 包与 message 包，避免循环依赖）

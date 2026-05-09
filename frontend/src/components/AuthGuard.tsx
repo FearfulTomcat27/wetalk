@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/stores/auth";
 
@@ -13,7 +13,6 @@ export default function AuthGuard({ children }: AuthGuardProps) {
   const token = useAuthStore((s) => s.token);
   const _hydrated = useAuthStore((s) => s._hydrated);
   const init = useAuthStore((s) => s.init);
-  const [mounted, setMounted] = useState(false);
 
   // 初始化：从 localStorage 恢复 token
   useEffect(() => {
@@ -21,17 +20,13 @@ export default function AuthGuard({ children }: AuthGuardProps) {
   }, [init]);
 
   useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  useEffect(() => {
-    if (mounted && _hydrated && token) {
+    if (_hydrated && token) {
       router.replace("/");
     }
-  }, [mounted, _hydrated, token, router]);
+  }, [_hydrated, token, router]);
 
-  // 等待 hydration 或未挂载 → 显示空白
-  if (!_hydrated || !mounted) {
+  // 等待 hydration → 显示空白
+  if (!_hydrated) {
     return null;
   }
 

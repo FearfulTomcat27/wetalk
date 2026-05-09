@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo } from "react";
 import type { Contact } from "@/types/chat";
 import { cn } from "@/lib/utils";
-import { getAvatarSrc } from "@/lib/avatar";
+import { Avatar } from "@/components/Avatar";
 import { UserPlus } from "lucide-react";
 import { AddFriendDialog } from "@/components/AddFriendDialog";
 
@@ -21,6 +21,23 @@ interface ContactListProps {
   headerContent?: React.ReactNode;
 }
 
+/** 格式化消息时间：今天→HH:mm，昨天→"昨天"，更早→MM-DD */
+function formatTime(time?: string): string | null {
+  if (!time) {return null;}
+  const date = new Date(time);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const yesterday = new Date(today.getTime() - 86400000);
+  const msgDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  if (msgDay.getTime() === today.getTime()) {
+    return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+  }
+  if (msgDay.getTime() === yesterday.getTime()) {
+    return "昨天";
+  }
+  return `${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
 export function ContactList({
   contacts,
   activeContactId,
@@ -32,17 +49,7 @@ export function ContactList({
   headerContent,
 }: ContactListProps) {
   const [search, setSearch] = useState("");
-  const [avatarErrors, setAvatarErrors] = useState<Set<number>>(new Set());
   const [addFriendOpen, setAddFriendOpen] = useState(false);
-
-  const handleAvatarError = useCallback((contactId: number) => {
-    setAvatarErrors((prev) => {
-      if (prev.has(contactId)) {return prev;}
-      const next = new Set(prev);
-      next.add(contactId);
-      return next;
-    });
-  }, []);
 
   const filteredContacts = useMemo(() => {
     if (!search.trim()) {return contacts;}
@@ -154,6 +161,7 @@ export function ContactList({
               const isActive = contact.id === activeContactId;
               const hasUnread = contact.unread > 0;
               const isChat = variant === "chat";
+              const timeLabel = isChat ? formatTime(contact.lastMessageTime) : null;
 
               return (
                 <li key={contact.id}>
@@ -163,31 +171,21 @@ export function ContactList({
                     className={cn(
                       "group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-all duration-150",
                       isActive
-                        ? "bg-primary/10 hover:bg-primary/15"
+                        ? "bg-[#3b82f6] hover:bg-[#3b82f6]/90 text-white"
                         : "hover:bg-muted/70",
                     )}
                   >
                     {/* 头像 */}
                     <div className="relative shrink-0">
-                      {avatarErrors.has(contact.id) ? (
-                        <div
-                          className={cn(
-                            "flex size-11 items-center justify-center rounded-full text-sm font-semibold transition-colors",
-                            isActive
-                              ? "bg-primary text-primary-foreground"
-                              : "bg-muted text-muted-foreground group-hover:bg-muted-foreground/15",
-                          )}
-                        >
-                          {(contact.nickname || contact.username).charAt(0).toUpperCase()}
-                        </div>
-                      ) : (
-                        <img
-                          src={getAvatarSrc(contact.avatar, contact.username)}
-                          alt={contact.nickname || contact.username}
-                          onError={() => handleAvatarError(contact.id)}
-                          className="size-11 rounded-full object-cover"
-                        />
-                      )}
+                      <Avatar
+                        src={contact.avatar}
+                        alt={contact.nickname || contact.username}
+                        size={36}
+                        className={cn(
+                          isActive ? "ring-2 ring-white/50" : "ring-2 ring-border",
+                          isActive && "bg-white/30 text-white",
+                        )}
+                      />
                       {/* 未读红点 — 仅 chat 模式 */}
                       {isChat && hasUnread && !isActive && (
                         <span className="absolute -right-0.5 -top-0.5 flex min-w-[16px] items-center justify-center rounded-full bg-destructive px-1 py-0 text-[10px] font-bold leading-4 text-destructive-foreground shadow-sm">
@@ -202,13 +200,26 @@ export function ContactList({
                         <p
                           className={cn(
                             "truncate text-sm",
-                            isChat && hasUnread && !isActive
-                              ? "font-semibold text-foreground"
-                              : "font-medium text-foreground",
+                            isActive
+                              ? "font-medium text-white"
+                              : isChat && hasUnread && !isActive
+                                ? "font-semibold text-foreground"
+                                : "font-medium text-foreground",
                           )}
                         >
                           {contact.nickname || contact.username}
                         </p>
+                        {/* 最后消息时间 — 仅 chat 模式 */}
+                        {isChat && timeLabel && (
+                          <span
+                            className={cn(
+                              "shrink-0 text-[11px]",
+                              isActive ? "text-white/60" : "text-muted-foreground/60",
+                            )}
+                          >
+                            {timeLabel}
+                          </span>
+                        )}
                         {/* 活跃状态下的未读标记 — 仅 chat 模式 */}
                         {isChat && hasUnread && isActive && (
                           <span className="shrink-0 rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-bold leading-none text-primary-foreground">
@@ -221,9 +232,11 @@ export function ContactList({
                         <p
                           className={cn(
                             "mt-0.5 truncate text-xs",
-                            hasUnread && !isActive
-                              ? "font-medium text-foreground/75"
-                              : "text-muted-foreground",
+                            isActive
+                              ? "text-white/70"
+                              : hasUnread && !isActive
+                                ? "font-medium text-foreground/75"
+                                : "text-muted-foreground",
                           )}
                         >
                           {contact.lastMessage}

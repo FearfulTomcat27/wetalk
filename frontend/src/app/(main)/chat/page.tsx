@@ -2,7 +2,6 @@
 
 import { useState, useCallback, useRef, useEffect, type MouseEvent as ReactMouseEvent } from "react";
 import { useSearchParams } from "next/navigation";
-import { Sidebar } from "@/components/Sidebar";
 import { ContactList } from "@/components/ContactList";
 import { ChatArea } from "@/components/ChatArea";
 import { ChatInput } from "@/components/ChatInput";
@@ -27,6 +26,7 @@ function friendToContact(f: FriendInfo): Contact {
     nickname: f.friend_name,
     avatar: f.friend_avatar,
     lastMessage: f.last_message,
+    lastMessageTime: f.last_message_time,
     unread: f.unread_count ?? 0,
   };
 }
@@ -45,6 +45,7 @@ export default function ChatPage() {
   const sending = useChatStore((s) => s.sending);
   const connected = useChatStore((s) => s.connected);
   const setContacts = useChatStore((s) => s.setContacts);
+  const setActiveContactId = useChatStore((s) => s.setActiveContactId);
   const selectContact = useChatStore((s) => s.selectContact);
   const setInputText = useChatStore((s) => s.setInputText);
   const sendMessage = useChatStore((s) => s.sendMessage);
@@ -83,10 +84,10 @@ export default function ChatPage() {
     if (contactParam && contacts.length > 0) {
       const contactId = Number(contactParam);
       if (!Number.isNaN(contactId) && contacts.some((c) => c.id === contactId)) {
-        selectContact(contactId);
+        setActiveContactId(contactId);
       }
     }
-  }, [searchParams, contacts, selectContact]);
+  }, [searchParams, contacts.length, setActiveContactId]);
 
   // 选中联系人时加载历史消息 → 写入 store
   useEffect(() => {
@@ -169,10 +170,9 @@ export default function ChatPage() {
     function handleMouseMove(e: globalThis.MouseEvent) {
       if (!containerRef.current) {return;}
       const rect = containerRef.current.getBoundingClientRect();
-      const sidebarWidth = 68;
-      const newWidth = e.clientX - rect.left - sidebarWidth;
+      const newWidth = e.clientX - rect.left;
       const maxWidth = Math.min(
-        rect.width - sidebarWidth - MIN_CHAT_WIDTH,
+        rect.width - MIN_CHAT_WIDTH,
         MAX_CONTACT_WIDTH,
       );
       setContactWidth(Math.min(Math.max(newWidth, MIN_CONTACT_WIDTH), maxWidth));
@@ -197,10 +197,7 @@ export default function ChatPage() {
 
   return (
     <div ref={containerRef} className="flex flex-1 overflow-hidden">
-      {/* 第一列：窄侧边栏 */}
-      <Sidebar />
-
-      {/* 第二列：联系人列表 */}
+      {/* 联系人列表 */}
       {contactsLoading ? (
         <div className="flex items-center justify-center" style={{ width: contactWidth }}>
           <Loader2 className="size-6 animate-spin text-muted-foreground" />
