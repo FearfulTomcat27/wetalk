@@ -2,13 +2,15 @@
 
 import { useRouter, usePathname } from "next/navigation";
 import { useAuthStore } from "@/stores/auth";
-import { MessageCircle, Users, LogOut } from "lucide-react";
+import { MessageCircle, Users, LogOut, Sun, Moon } from "lucide-react";
+import { useTheme } from "next-themes";
 import { Avatar } from "@/components/Avatar";
 import { ProfilePopover } from "@/components/ProfilePopover";
 
 export function Sidebar() {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
+  const { theme, setTheme } = useTheme();
   const router = useRouter();
   const pathname = usePathname();
 
@@ -77,14 +79,23 @@ export function Sidebar() {
         )}
       </div>
 
-      {/* 底部：退出按钮 */}
-      <button
+      {/* 底部：主题切换 + 退出按钮 */}
+      <div className="flex flex-col items-center gap-1">
+        <button
+          onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+          className="flex size-10 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          title={theme === "dark" ? "切换亮色" : "切换暗色"}
+        >
+          {theme === "dark" ? <Sun className="size-5" /> : <Moon className="size-5" />}
+        </button>
+        <button
         onClick={handleLogout}
         className="flex size-10 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
         title="退出登录"
       >
         <LogOut className="size-5" />
       </button>
+      </div>
     </aside>
   );
 }

@@ -20,6 +20,10 @@ export {
 } from "./friends";
 export type { FriendInfo, PendingRequest } from "./friends";
 
+// 上传
+export { uploadFile } from "./upload";
+export type { UploadResult } from "./upload";
+
 // 消息
 export { sendMessage, getMessages, markAsRead } from "./messages";
 export type { SendMessageRequest } from "./messages";

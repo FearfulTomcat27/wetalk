@@ -1,8 +1,27 @@
 import { create } from "zustand";
-import type { Contact, Message } from "@/types/chat";
+import type { Contact, Message, FileMetadata } from "@/types/chat";
 import { wsClient } from "@/lib/ws";
 import { sendMessage as sendMessageAPI } from "@/lib/api";
 import { useAuthStore } from "@/stores/auth";
+
+/** 从 OSS URL 提取文件名 */
+function extractFilename(url: string): string {
+  try {
+    const lastSegment = new URL(url).pathname.split("/").pop() || "";
+    const idx = lastSegment.indexOf("_");
+    return idx !== -1 ? lastSegment.slice(idx + 1) : lastSegment;
+  } catch {
+    return url;
+  }
+}
+
+/** 根据消息类型格式化预览文本 */
+function formatMessagePreview(content: string, contentType?: string): string {
+  if (!contentType || contentType === "text") {return content;}
+  if (contentType === "image") {return "[图片]";}
+  if (contentType === "file") {return `[文件] ${extractFilename(content)}`;}
+  return content;
+}
 
 interface ChatState {
   contacts: Contact[];
@@ -20,6 +39,7 @@ interface ChatState {
   setActiveContactId: (id: number) => void;
   setInputText: (contactId: number, text: string) => void;
   sendMessage: () => void;
+  sendMediaMessage: (content: string, contentType: string, fileMetadata?: FileMetadata) => void;
   addContact: (contact: Contact) => void;
   loadMessages: (contactId: number, msgs: Message[]) => void;
   receiveMessage: (msg: Message) => void;
@@ -121,6 +141,73 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
+  sendMediaMessage: (content: string, contentType: string, fileMetadata?: FileMetadata) => {
+    const { activeContactId, connected, contacts } = get();
+    if (activeContactId === null) {
+      return;
+    }
+
+    const currentUserId = useAuthStore.getState().user?.id ?? 0;
+    const clientMsgId = `c_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const lastMsgLabel = fileMetadata?.original_name ? `[文件] ${fileMetadata.original_name}` : formatMessagePreview(content, contentType);
+
+    const tempMsg: Message = {
+      id: -Date.now(),
+      sender_id: currentUserId,
+      receiver_id: activeContactId,
+      content,
+      content_type: contentType,
+      created_at: new Date().toISOString(),
+      client_msg_id: clientMsgId,
+      file_metadata: fileMetadata,
+    };
+
+    set((state) => ({
+      messages: {
+        ...state.messages,
+        [activeContactId]: [
+          ...(state.messages[activeContactId] || []),
+          tempMsg,
+        ],
+      },
+      contacts: contacts.map((c) =>
+        c.id === activeContactId ? { ...c, lastMessage: lastMsgLabel, lastMessageTime: new Date().toISOString() } : c
+      ),
+    }));
+
+    const fmPayload = fileMetadata ? {
+      url: fileMetadata.url!,
+      original_name: fileMetadata.original_name!,
+      file_size: fileMetadata.file_size!,
+      mime_type: fileMetadata.mime_type!,
+    } : undefined;
+
+    if (connected) {
+      wsClient.send("message.send", {
+        receiver_id: activeContactId,
+        content,
+        content_type: contentType,
+        client_msg_id: clientMsgId,
+        file_metadata: fmPayload,
+      });
+    } else {
+      set((state) => ({
+        sending: { ...state.sending, [activeContactId]: true },
+      }));
+      sendMessageAPI({ receiver_id: activeContactId, content, content_type: contentType, client_msg_id: clientMsgId, file_metadata: fmPayload })
+        .then((res) => {
+          const serverMsg = res.data!;
+          get().updateMessageStatus(clientMsgId, serverMsg);
+        })
+        .catch(() => {})
+        .finally(() => {
+          set((state) => ({
+            sending: { ...state.sending, [activeContactId]: false },
+          }));
+        });
+    }
+  },
+
   addContact: (contact: Contact) => {
     set((state) => {
       if (state.contacts.some((c) => c.id === contact.id)) {
@@ -143,6 +230,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         return state;
       }
       const isActive = state.activeContactId === msg.sender_id;
+      const lastMsgLabel = formatMessagePreview(msg.content, msg.content_type);
       return {
         messages: {
           ...state.messages,
@@ -150,7 +238,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         },
         contacts: state.contacts.map((c) =>
           c.id === msg.sender_id
-            ? { ...c, lastMessage: msg.content, lastMessageTime: msg.created_at, unread: isActive ? c.unread : c.unread + 1 }
+            ? { ...c, lastMessage: lastMsgLabel, lastMessageTime: msg.created_at, unread: isActive ? c.unread : c.unread + 1 }
             : c
         ),
       };

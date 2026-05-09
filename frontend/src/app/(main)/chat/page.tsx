@@ -19,13 +19,33 @@ const MIN_CONTACT_WIDTH = 200;
 const MAX_CONTACT_WIDTH = 480;
 const MIN_CHAT_WIDTH = 300;
 
+/** 从 OSS URL 提取文件名：uploads/file/1/1712345678_photo.jpg → photo.jpg */
+function extractFilename(url: string): string {
+  try {
+    const lastSegment = new URL(url).pathname.split("/").pop() || "";
+    const idx = lastSegment.indexOf("_");
+    return idx !== -1 ? lastSegment.slice(idx + 1) : lastSegment;
+  } catch {
+    return url;
+  }
+}
+
+/** 根据消息类型格式化联系人列表预览文本 */
+function formatMessagePreview(content: string, contentType?: string): string {
+  if (!contentType || contentType === "text") {return content;}
+  if (contentType === "image") {return "[图片]";}
+  if (contentType === "file") {return `[文件] ${extractFilename(content)}`;}
+  return content;
+}
+
 function friendToContact(f: FriendInfo): Contact {
   return {
     id: f.friend_id,
     username: f.friend_name,
     nickname: f.friend_name,
     avatar: f.friend_avatar,
-    lastMessage: f.last_message,
+    lastMessage: f.last_message ? formatMessagePreview(f.last_message, f.last_message_type) : undefined,
+    lastMessageType: f.last_message_type,
     lastMessageTime: f.last_message_time,
     unread: f.unread_count ?? 0,
   };
@@ -49,6 +69,7 @@ export default function ChatPage() {
   const selectContact = useChatStore((s) => s.selectContact);
   const setInputText = useChatStore((s) => s.setInputText);
   const sendMessage = useChatStore((s) => s.sendMessage);
+  const sendMediaMessage = useChatStore((s) => s.sendMediaMessage);
   const loadMessages = useChatStore((s) => s.loadMessages);
   const receiveMessage = useChatStore((s) => s.receiveMessage);
   const updateMessageStatus = useChatStore((s) => s.updateMessageStatus);
@@ -262,6 +283,7 @@ export default function ChatPage() {
                 }
               }}
               onSend={sendMessage}
+              onSendMedia={sendMediaMessage}
             />
           </>
         ) : (

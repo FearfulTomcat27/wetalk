@@ -51,22 +51,47 @@ func main() {
 	friendSvc := friend.NewService()
 
 	// WS 发送消息回调（桥接 ws 包与 message 包，避免循环依赖）
-	sendMsgFunc := func(senderID int64, receiverID int64, content string, clientMsgID string) (*ws.SentMessage, error) {
-		msg, err := msgSvc.SendMessage(senderID, message.SendMessageRequest{
-			ReceiverID: receiverID,
-			Content:    content,
+	sendMsgFunc := func(senderID int64, receiverID int64, content string, contentType string, clientMsgID string, fileMetadata *ws.WSFileMetadata) (*ws.SentMessage, error) {
+		var filePayload *message.FileMetadataPayload
+		if fileMetadata != nil {
+			filePayload = &message.FileMetadataPayload{
+				URL:          fileMetadata.URL,
+				OriginalName: fileMetadata.OriginalName,
+				FileSize:     fileMetadata.FileSize,
+				MimeType:     fileMetadata.MimeType,
+				Width:        fileMetadata.Width,
+				Height:       fileMetadata.Height,
+			}
+		}
+		msgResp, err := msgSvc.SendMessage(senderID, message.SendMessageRequest{
+			ReceiverID:   receiverID,
+			Content:      content,
+			ContentType:  contentType,
+			FileMetadata: filePayload,
 		})
 		if err != nil {
 			return nil, err
 		}
+		var meta *ws.WSFileMetadata
+		if msgResp.FileMetadata != nil {
+			meta = &ws.WSFileMetadata{
+				URL:          msgResp.FileMetadata.URL,
+				OriginalName: msgResp.FileMetadata.OriginalName,
+				FileSize:     msgResp.FileMetadata.FileSize,
+				MimeType:     msgResp.FileMetadata.MimeType,
+				Width:        msgResp.FileMetadata.Width,
+				Height:       msgResp.FileMetadata.Height,
+			}
+		}
 		return &ws.SentMessage{
-			ID:          msg.ID,
-			SenderID:    msg.SenderID,
-			ReceiverID:  msg.ReceiverID,
-			Content:     msg.Content,
-			ContentType: msg.ContentType,
-			Status:      msg.Status,
-			CreatedAt:   msg.CreatedAt,
+			ID:           msgResp.ID,
+			SenderID:     msgResp.SenderID,
+			ReceiverID:   msgResp.ReceiverID,
+			Content:      msgResp.Content,
+			ContentType:  msgResp.ContentType,
+			FileMetadata: meta,
+			Status:       msgResp.Status,
+			CreatedAt:    msgResp.CreatedAt,
 		}, nil
 	}
 
@@ -74,6 +99,7 @@ func main() {
 	userHandler := user.NewHandler(userSvc)
 	friendHandler := friend.NewHandler(friendSvc)
 	msgHandler := message.NewHandler(msgSvc, hub)
+	uploadHandler := message.NewUploadHandler(ossClient)
 
 	// 注册路由
 	r := router.Setup(&router.Dependencies{
@@ -83,6 +109,7 @@ func main() {
 		UserHandler:   userHandler,
 		FriendHandler: friendHandler,
 		MsgHandler:    msgHandler,
+		UploadHandler: uploadHandler,
 	})
 
 	// 启动 HTTP 服务

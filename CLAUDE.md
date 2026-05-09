@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-WeTalk — C/S 模式的在线聊天应用。前端 Next.js 16 (React 19) + Go/gin 后端 + MySQL + Redis。
+WeTalk — C/S 模式的在线聊天应用。前端 Next.js 16 (React 19) + Go/gin 后端 + MySQL + Redis + 阿里云 OSS。
 
 ## Commands
 
@@ -42,8 +42,9 @@ wetalk/
 │       │   ├── RouteGuard.tsx   # 全局路由守卫 (唯一跳转逻辑入口)
 │       │   ├── Sidebar.tsx      # 左侧窄边栏 (68px, 头像+导航+退出)
 │       │   ├── ContactList.tsx  # 联系人列表 (chat/contacts 双 variant)
-│       │   ├── ChatArea.tsx     # 消息气泡区域 (微信绿色 #95EC69)
-│       │   ├── ChatInput.tsx    # 输入框+底部图标栏 (Enter 发送)
+│       │   ├── ChatArea.tsx     # 消息气泡区域（文本/图片缩略图/文件卡片，图片全屏预览，文件详情 Dialog）
+│       │   ├── ChatInput.tsx    # 输入框+emoji面板+图片/文件上传 (Enter 发送, Shift+Enter 换行)
+│       │   ├── ThemeProvider.tsx # next-themes 主题支持 (浅色/深色)
 │       │   ├── AddFriendDialog.tsx  # 搜索用户+发送好友请求弹窗
 │       │   └── ui/              # shadcn/ui 组件 (button/card/dialog/input...)
 │       ├── config/
@@ -54,13 +55,14 @@ wetalk/
 │       │   │   ├── auth.ts      #   login/register/fetchCurrentUser
 │       │   │   ├── users.ts     #   searchUsers
 │       │   │   ├── messages.ts  #   sendMessage/getMessages/markAsRead
-│       │   │   └── friends.ts   #   addFriend/getPendingRequests...
+│       │   │   ├── friends.ts   #   addFriend/getPendingRequests...
+│       │   │   └── upload.ts    #   uploadFile (multipart/form-data)
 │       │   ├── avatar.ts        # getAvatarSrc(avatar?, seed?) — 优先后端 URL, DiceBear fallback
 │       │   ├── validators.ts    # zod schemas (login/register)
 │       │   └── ws.ts            # WebSocket 客户端单例 (connect/disconnect/send/on, auth frame, 心跳, 重连)
 │       ├── stores/
 │       │   ├── auth.ts          # zustand: token/user/_hydrated/_userFetched/init/login/register/logout
-│       │   └── chat.ts          # zustand: contacts/messages/activeContactId/inputTexts/connected/sending + WS-first sendMessage + receiveMessage/updateMessageStatus
+│       │   └── chat.ts          # zustand: contacts/messages/activeContactId/inputTexts/connected/sending + sendMessage(WS-first+HTTP降级) + sendMediaMessage(图片/文件) + receiveMessage/updateMessageStatus + formatMessagePreview
 │       ├── types/chat.ts        # Contact, Message (含 client_msg_id) 类型
 │       └── hooks/
 ├── backend/                     # Go 1.26, gin v1.12
@@ -71,13 +73,13 @@ wetalk/
 │   │   ├── router/router.go     # 路由注册（按模块分组，从 main.go 拆出）
 │   │   ├── user/                # handler → service → repository 三层
 │   │   ├── friend/              # 好友模块 (添加/接受/拒绝/待处理)
-│   │   ├── message/             # 消息模块 (发送/查询聊天记录)
+│   │   ├── message/             # 消息模块 (发送/查询/上传/文件元数据)
 │   │   ├── ws/                  # WebSocket (Hub + Client + auth frame 认证)
 │   │   └── middleware/auth.go   # JWT Bearer token 解析 → 注入 user_id
 │   ├── pkg/
 │   │   ├── errors/errors.go     # ErrNotFound/ErrConflict/ErrUnauthorized
 │   │   └── utils/utils.go       # 统一响应 Success()/Error()
-│   └── scripts/migrations/      # SQL 迁移 (users/friends/messages 表)
+│   └── scripts/migrations/      # SQL 迁移 (users/friends/messages/file_metadata 表)
 ```
 
 ## Code Formatting (必须在完成功能代码后执行)
@@ -108,6 +110,22 @@ wetalk/
 - `getAvatarSrc(avatarUrl?, seed?)` — 无 URL 时 DiceBear (`micah?seed=`) fallback。
 - 所有 `<img>` 有 `onError` fallback 到首字母占位。
 
+### 时间戳显示 (ChatArea.formatTime)
+消息时间戳按以下优先级格式化：
+
+| 条件 | 格式 | 示例 |
+|------|------|------|
+| 昨天 | `昨天 HH:mm` | 昨天 14:30 |
+| 当前周（周一~周日） | `星期X HH:mm` | 星期一 14:30 |
+| 同年非当前周 | `M月D日 HH:mm` | 5月10日 14:30 |
+| 跨年 | `YYYY年M月D日 HH:mm` | 2025年12月28日 14:30 |
+
+### 文件上传 (OSS)
+- 前端 `ChatInput` 支持图片/文件上传按钮，图片 ≤10MB，文件 ≤20MB。
+- 后端 `/api/upload` 接收 multipart 请求，上传至阿里云 OSS，key 格式 `uploads/{type}/{user_id}/{timestamp}_{filename}`。
+- 上传成功后返回 `{url, content_type, file_name, file_size, file_type}`。
+- `file_metadata` 表存储文件元数据（URL/原始名称/大小/MIME/宽高），通过 `message_id` 一对一关联消息。
+
 ### API 对接
 - 前端 axios 实例 `baseURL: http://localhost:8080`（`NEXT_PUBLIC_API_URL` 可覆盖）。
 - 请求拦截器自动注入 `Bearer token`。
@@ -131,8 +149,8 @@ wetalk/
 ### WebSocket 实时聊天
 - 后端 `ws` 包：Hub 模式（连接注册表 + 消息路由），Client（auth frame 认证 + ReadPump/WritePump）
 - 前端 `ws.ts`：WSClient 单例，auth frame 认证，25s 心跳 ping，指数退避重连
-- 消息协议：扁平 JSON 格式 `{"type":"message.new","id":42,"sender_id":1,...}`
-- 路由注册集中在 `internal/router/router.go`，按模块分组（auth/api/friends/messages/ws）
+- 消息协议：扁平 JSON 格式，文本消息 `{"type":"message.new","id":42,"sender_id":1,...}`，图片/文件消息额外携带 `content_type` 和 `file_metadata`
+- 路由注册集中在 `internal/router/router.go`，按模块分组（auth/api/friends/messages/ws/upload）
 - WS-first 发送：connected 时走 WS，离线时 HTTP POST 降级
 - 乐观 UI：发送时生成临时消息（负 id + client_msg_id），收到 message.sent 后替换为服务端真实消息
 
@@ -152,5 +170,6 @@ wetalk/
 | POST | `/api/messages` | JWT | 发送消息 `{receiver_id, content}` |
 | GET | `/api/messages?friend_id=` | JWT | 聊天记录 (双向查询) |
 | PUT | `/api/messages/read` | JWT | 标记已读 `{sender_id}` |
+| POST | `/api/upload` | JWT | 上传文件/图片 (multipart, `type=image\|file`, 图片≤10MB, 文件≤20MB) |
 | GET | `/ws` | auth frame | WebSocket 连接 (实时消息推送) |
 | GET | `/ping` | 无 | 健康检查 |

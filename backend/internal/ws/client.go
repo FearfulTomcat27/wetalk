@@ -17,17 +17,18 @@ const (
 )
 
 // SendMessageFunc 发送消息回调函数类型（避免 ws → message 循环依赖）
-type SendMessageFunc func(senderID int64, receiverID int64, content string, clientMsgID string) (*SentMessage, error)
+type SendMessageFunc func(senderID int64, receiverID int64, content string, contentType string, clientMsgID string, fileMetadata *WSFileMetadata) (*SentMessage, error)
 
-// SentMessage 回调返回的消息数据（与 message.Message 对应）
+// SentMessage 回调返回的消息数据
 type SentMessage struct {
-	ID          int64
-	SenderID    int64
-	ReceiverID  int64
-	Content     string
-	ContentType string
-	Status      string
-	CreatedAt   time.Time
+	ID           int64
+	SenderID     int64
+	ReceiverID   int64
+	Content      string
+	ContentType  string
+	FileMetadata *WSFileMetadata
+	Status       string
+	CreatedAt    time.Time
 }
 
 // Client WebSocket 客户端
@@ -189,34 +190,36 @@ func (c *Client) sendAuthError(msg string) {
 
 // handleMessageSend 处理发送消息
 func (c *Client) handleMessageSend(req *MessageSendRequest) {
-	msg, err := c.sendMsg(c.userID, req.ReceiverID, req.Content, req.ClientMsgID)
+	msg, err := c.sendMsg(c.userID, req.ReceiverID, req.Content, req.ContentType, req.ClientMsgID, req.FileMetadata)
 	if err != nil {
 		c.send <- &ErrorEvent{Type: TypeError, Message: "发送消息失败"}
 		return
 	}
 
-	// 发送 message.sent 给发送者（扁平格式）
+	// 发送 message.sent 给发送者
 	c.send <- &MessageSentEvent{
-		Type:        TypeMessageSent,
-		ID:          msg.ID,
-		SenderID:    msg.SenderID,
-		ReceiverID:  msg.ReceiverID,
-		Content:     msg.Content,
-		ContentType: msg.ContentType,
-		Status:      msg.Status,
-		CreatedAt:   msg.CreatedAt.Format(time.RFC3339),
-		ClientMsgID: req.ClientMsgID,
+		Type:         TypeMessageSent,
+		ID:           msg.ID,
+		SenderID:     msg.SenderID,
+		ReceiverID:   msg.ReceiverID,
+		Content:      msg.Content,
+		ContentType:  msg.ContentType,
+		FileMetadata: msg.FileMetadata,
+		Status:       msg.Status,
+		CreatedAt:    msg.CreatedAt,
+		ClientMsgID:  req.ClientMsgID,
 	}
 
-	// 发送 message.new 给接收者（扁平格式）
+	// 发送 message.new 给接收者
 	c.hub.SendTo(req.ReceiverID, &MessageNewEvent{
-		Type:        TypeMessageNew,
-		ID:          msg.ID,
-		SenderID:    msg.SenderID,
-		ReceiverID:  msg.ReceiverID,
-		Content:     msg.Content,
-		ContentType: msg.ContentType,
-		Status:      msg.Status,
-		CreatedAt:   msg.CreatedAt.Format(time.RFC3339),
+		Type:         TypeMessageNew,
+		ID:           msg.ID,
+		SenderID:     msg.SenderID,
+		ReceiverID:   msg.ReceiverID,
+		Content:      msg.Content,
+		ContentType:  msg.ContentType,
+		FileMetadata: msg.FileMetadata,
+		Status:       msg.Status,
+		CreatedAt:    msg.CreatedAt,
 	})
 }

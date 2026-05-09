@@ -14,3 +14,7 @@ func registerMessageRoutes(api *gin.RouterGroup, h *message.Handler) {
 		messages.PUT("/read", h.Read)
 	}
 }
+
+func registerUploadRoutes(api *gin.RouterGroup, h *message.UploadHandler) {
+	api.POST("/upload", h.Upload)
+}

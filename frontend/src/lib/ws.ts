@@ -5,9 +5,15 @@ interface WsMessage {
   [key: string]: unknown;
 }
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+
+function deriveWsUrl(apiUrl: string): string {
+  return apiUrl.replace(/^http/, "ws") + "/ws";
+}
+
 const WS_URL =
   typeof window !== "undefined"
-    ? process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8080/ws"
+    ? process.env.NEXT_PUBLIC_WS_URL || deriveWsUrl(API_URL)
     : "";
 
 const RECONNECT_BASE_MS = 1000;

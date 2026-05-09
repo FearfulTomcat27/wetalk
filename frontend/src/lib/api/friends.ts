@@ -8,6 +8,7 @@ export interface FriendInfo {
   friend_avatar?: string;
   created_at?: string;
   last_message?: string;
+  last_message_type?: string;
   last_message_time?: string;
   unread_count?: number;
 }

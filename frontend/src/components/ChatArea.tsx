@@ -1,10 +1,66 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
+import Image from "next/image";
 import type { Message } from "@/types/chat";
 import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/Avatar";
 import { useAuthStore } from "@/stores/auth";
+import { Download, X } from "lucide-react";
+
+/** 根据文件扩展名返回对应的图标颜色和显示文字 */
+function getFileTypeInfo(mimeType?: string, fileName?: string): { color: string; label: string } {
+  if (!mimeType && !fileName) {
+    return { color: "#8b8b8b", label: "?" };
+  }
+  // 从 mime_type 或文件名提取扩展名
+  let ext = "";
+  if (fileName) {
+    const parts = fileName.split(".");
+    if (parts.length > 1) {
+      ext = parts[parts.length - 1].toUpperCase();
+    }
+  }
+  if (!ext && mimeType) {
+    const mimeMap: Record<string, string> = {
+      "application/pdf": "PDF",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "DOCX",
+      "application/msword": "DOC",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "XLSX",
+      "application/vnd.ms-excel": "XLS",
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation": "PPTX",
+      "application/vnd.ms-powerpoint": "PPT",
+      "application/zip": "ZIP",
+      "application/x-rar-compressed": "RAR",
+      "application/x-7z-compressed": "7Z",
+      "text/plain": "TXT",
+      "application/json": "JSON",
+    };
+    ext = mimeMap[mimeType] || mimeType.split("/").pop()?.toUpperCase() || "";
+  }
+  // 扩展名对应颜色
+  const colorMap: Record<string, string> = {
+    PDF: "#e74c3c",
+    DOC: "#2979ff",
+    DOCX: "#2979ff",
+    XLS: "#27ae60",
+    XLSX: "#27ae60",
+    PPT: "#e67e22",
+    PPTX: "#e67e22",
+    ZIP: "#f39c12",
+    RAR: "#f39c12",
+    "7Z": "#f39c12",
+    TXT: "#8b8b8b",
+    JSON: "#8b8b8b",
+  };
+  return { color: colorMap[ext] || "#8b8b8b", label: ext || "?" };
+}
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import * as VisuallyHidden from "@radix-ui/react-visually-hidden";
 
 interface ChatAreaProps {
   messages: Message[];
@@ -18,25 +74,77 @@ interface ChatAreaProps {
 }
 
 /**
- * 格式化时间戳，当天显示 HH:mm，跨天显示 MM-DD HH:mm
+ * 格式化时间戳
+ * - 昨天：显示"昨天 HH:mm"
+ * - 当前周（周一~周日）：显示"星期X HH:mm"（如"星期一 14:30"）
+ * - 非当前周但同年：显示"M月D日 HH:mm"（如"5月10日 14:30"）
+ * - 非今年：显示"YYYY年M月D日 HH:mm"（如"2025年12月28日 14:30"）
  */
 function formatTime(ts: string | number): string {
   const date = new Date(ts);
-  const now = new Date();
   const hours = date.getHours().toString().padStart(2, "0");
   const minutes = date.getMinutes().toString().padStart(2, "0");
+  const timeStr = `${hours}:${minutes}`;
 
-  const isToday =
-    date.getFullYear() === now.getFullYear() &&
-    date.getMonth() === now.getMonth() &&
-    date.getDate() === now.getDate();
+  const now = new Date();
 
-  if (isToday) {
-    return `${hours}:${minutes}`;
+  // 计算本周一 00:00:00
+  const dayOfWeek = now.getDay(); // 0=周日, 1=周一, ...
+  const mondayDiff = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - mondayDiff);
+  monday.setHours(0, 0, 0, 0);
+
+  // 本周日 23:59:59
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  sunday.setHours(23, 59, 59, 999);
+
+  if (date >= monday && date <= sunday) {
+    // 昨天优先
+    const yesterday = new Date(now);
+    yesterday.setDate(now.getDate() - 1);
+    if (
+      date.getFullYear() === yesterday.getFullYear() &&
+      date.getMonth() === yesterday.getMonth() &&
+      date.getDate() === yesterday.getDate()
+    ) {
+      return `昨天 ${timeStr}`;
+    }
+    const weekdays = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"];
+    return `${weekdays[date.getDay()]} ${timeStr}`;
   }
-  const month = (date.getMonth() + 1).toString().padStart(2, "0");
-  const day = date.getDate().toString().padStart(2, "0");
-  return `${month}-${day} ${hours}:${minutes}`;
+
+  // 非当前周
+  const month = (date.getMonth() + 1).toString();
+  const day = date.getDate().toString();
+
+  if (date.getFullYear() === now.getFullYear()) {
+    return `${month}月${day}日 ${timeStr}`;
+  }
+  return `${date.getFullYear()}年${month}月${day}日 ${timeStr}`;
+}
+
+/**
+ * 格式化文件大小
+ * < 1KB → "xxx B", < 1MB → "xxx KB", ≥ 1MB → "xxx.x MB"
+ */
+function formatFileSize(bytes?: number): string {
+  if (bytes === undefined || bytes === null) {return "";}
+  if (bytes < 1024) {return `${bytes} B`;}
+  if (bytes < 1024 * 1024) {return `${Math.floor(bytes / 1024)} KB`;}
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/** 从 OSS URL 提取文件名 */
+function extractFilename(url: string): string {
+  try {
+    const lastSegment = new URL(url).pathname.split("/").pop() || "";
+    const idx = lastSegment.indexOf("_");
+    return idx !== -1 ? lastSegment.slice(idx + 1) : lastSegment;
+  } catch {
+    return url;
+  }
 }
 
 /**
@@ -51,11 +159,33 @@ export function ChatArea({ messages, currentUserId, contactName, contactUsername
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const prevCountRef = useRef(messages.length);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [filePreview, setFilePreview] = useState<Message | null>(null);
 
   const user = useAuthStore((s) => s.user);
 
   const selfUsername = user?.username ?? "me";
   const otherUsername = contactUsername ?? contactName ?? "?";
+
+  // Esc 关闭图片预览
+  useEffect(() => {
+    if (!previewImage) {return;}
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {setPreviewImage(null);}
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [previewImage]);
+
+  // Esc 关闭文件预览
+  useEffect(() => {
+    if (!filePreview) {return;}
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {setFilePreview(null);}
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [filePreview]);
 
   
   // 新消息到达时自动滚动到底部
@@ -101,10 +231,11 @@ export function ChatArea({ messages, currentUserId, contactName, contactUsername
   }
 
   return (
-    <div
-      ref={scrollRef}
-      className="flex-1 overflow-y-auto px-4 py-3"
-    >
+    <>
+      <div
+        ref={scrollRef}
+        className="flex-1 overflow-y-auto px-4 py-3"
+      >
       <div className="mx-auto">
         {messages.map((msg, index) => {
           const isSelf = msg.sender_id === currentUserId;
@@ -136,39 +267,90 @@ export function ChatArea({ messages, currentUserId, contactName, contactUsername
                   size={36}
                 />
 
-                {/* 气泡 */}
+                {/* 气泡 / 图片缩略图 */}
                 <div className="relative max-w-[62%]">
-                  <div
-                    className={cn(
-                      "rounded-md px-3.5 py-2 text-sm leading-normal break-words whitespace-pre-wrap shadow-md",
-                      isSelf
-                        ? "bg-[#3b82f6] text-white"
-                        : "bg-[#eeeef0] text-gray-900",
-                    )}
-                  >
-                    <p>{msg.content}</p>
-                  </div>
-                  {/* 曲线箭头 — 与头像居中对齐 */}
-                  {isSelf ? (
-                    <svg
-                      className="absolute"
-                      width="5"
-                      height="15"
-                      viewBox="0 0 5 15"
-                      style={{ right: -5, top: 11 }}
+                  {msg.content_type === "image" ? (
+                    <div
+                      className="relative overflow-hidden rounded-md cursor-pointer shadow-md"
+                      style={{ maxWidth: 200 }}
+                      onClick={() => setPreviewImage(msg.content)}
                     >
-                      <path d="M 0,0 C 0,3 5,5.5 5,7.5 C 5,9.5 0,12 0,15" fill="#3b82f6" />
-                    </svg>
+                      <Image
+                        src={msg.content}
+                        alt="图片消息"
+                        width={200}
+                        height={150}
+                        className="object-cover"
+                        unoptimized={msg.content.includes("oss-cn-shanghai")}
+                      />
+                    </div>
                   ) : (
-                    <svg
-                      className="absolute"
-                      width="5"
-                      height="15"
-                      viewBox="0 0 5 15"
-                      style={{ left: -5, top: 11 }}
-                    >
-                      <path d="M 5,0 C 5,3 0,5.5 0,7.5 C 0,9.5 5,12 5,15" fill="#eeeef0" />
-                    </svg>
+                    <>
+                      <div
+                        className={cn(
+                          "rounded-md px-3.5 py-2 text-sm leading-normal break-words whitespace-pre-wrap shadow-md",
+                          isSelf
+                            ? "bg-[#3b82f6] text-white"
+                            : "bg-[#eeeef0] text-gray-900",
+                          msg.content_type === "file" && "p-2.5",
+                        )}
+                      >
+                        {msg.content_type === "file" ? (
+                          <div
+                            onClick={() => setFilePreview(msg)}
+                            className="flex items-center gap-2 cursor-pointer w-[180px] h-[60px]"
+                          >
+                            {/* 左侧：文件名 + 文件大小 */}
+                            <div className="min-w-0 flex-1">
+                              <p className={cn("truncate text-[13px] font-medium leading-snug", isSelf ? "text-white" : "text-gray-800")}>
+                                {msg.file_metadata?.original_name || extractFilename(msg.content) || "文件"}
+                              </p>
+                              {msg.file_metadata?.file_size != null && (
+                                <p className={cn("text-[11px] mt-0.5", isSelf ? "text-white/70" : "text-gray-500")}>
+                                  {formatFileSize(msg.file_metadata?.file_size)}
+                                </p>
+                              )}
+                            </div>
+                            {/* 右侧：文件类型图标方块 */}
+                            {(() => {
+                              const typeInfo = getFileTypeInfo(msg.file_metadata?.mime_type, msg.file_metadata?.original_name || extractFilename(msg.content));
+                              return (
+                                <div
+                                  className="flex size-10 shrink-0 items-center justify-center rounded-md text-white text-[11px] font-bold leading-none"
+                                  style={{ backgroundColor: typeInfo.color }}
+                                >
+                                  {typeInfo.label}
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        ) : (
+                          <p>{msg.content}</p>
+                        )}
+                      </div>
+                      {/* 曲线箭头 — 与头像居中对齐 */}
+                      {isSelf ? (
+                        <svg
+                          className="absolute"
+                          width="5"
+                          height="15"
+                          viewBox="0 0 5 15"
+                          style={{ right: -5, top: 11 }}
+                        >
+                          <path d="M 0,0 C 0,3 5,5.5 5,7.5 C 5,9.5 0,12 0,15" fill="#3b82f6" />
+                        </svg>
+                      ) : (
+                        <svg
+                          className="absolute"
+                          width="5"
+                          height="15"
+                          viewBox="0 0 5 15"
+                          style={{ left: -5, top: 11 }}
+                        >
+                          <path d="M 5,0 C 5,3 0,5.5 0,7.5 C 0,9.5 5,12 5,15" fill="#eeeef0" />
+                        </svg>
+                      )}
+                    </>
                   )}
                 </div>
               </div>
@@ -178,5 +360,81 @@ export function ChatArea({ messages, currentUserId, contactName, contactUsername
         <div ref={bottomRef} />
       </div>
     </div>
+
+    {/* 图片预览 */}
+    {previewImage && (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+        onClick={() => setPreviewImage(null)}
+      >
+        <div className="relative" style={{ width: "90vw", height: "90vh" }}>
+          <Image
+            src={previewImage}
+            alt="图片预览"
+            fill
+            className="object-contain"
+            unoptimized={previewImage.includes("oss-cn-shanghai")}
+          />
+        </div>
+        <button
+          className="absolute top-4 right-4 rounded-full bg-white/10 p-2 text-white/80 transition-colors hover:bg-white/20 hover:text-white"
+          onClick={() => setPreviewImage(null)}
+        >
+          <X className="size-6" />
+        </button>
+      </div>
+    )}
+
+    {/* 文件预览 Dialog */}
+    <Dialog open={filePreview !== null} onOpenChange={(open) => { if (!open) setFilePreview(null); }}>
+      <DialogContent className="sm:max-w-md">
+        <VisuallyHidden.Root>
+          <DialogTitle>文件预览</DialogTitle>
+        </VisuallyHidden.Root>
+        <div className="space-y-4">
+          {/* 文件信息 — 纵向布局 */}
+          <div className="flex flex-col items-center gap-4 p-4">
+            {/* 文件类型图标 */}
+            {(() => {
+              const typeInfo = getFileTypeInfo(filePreview?.file_metadata?.mime_type, filePreview?.file_metadata?.original_name || (filePreview?.content ? extractFilename(filePreview.content) : ""));
+              return (
+                <div
+                  className="flex size-16 shrink-0 items-center justify-center rounded-lg text-white text-base font-bold leading-none"
+                  style={{ backgroundColor: typeInfo.color }}
+                >
+                  {typeInfo.label}
+                </div>
+              );
+            })()}
+            {/* 文件名 + 文件大小 */}
+            <div className="text-center w-full">
+              <p className="truncate text-sm font-medium">{filePreview?.file_metadata?.original_name || (filePreview?.content ? extractFilename(filePreview.content) : "") || "文件"}</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {formatFileSize(filePreview?.file_metadata?.file_size)}
+              </p>
+            </div>
+          </div>
+          <div className="flex justify-center">
+          <button
+            onClick={() => {
+              const url = filePreview?.content || "";
+              const name = filePreview?.file_metadata?.original_name || (filePreview?.content ? extractFilename(filePreview.content) : "") || "file";
+              if (url) {
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = name;
+                a.click();
+              }
+            }}
+            className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+          >
+            <Download className="size-4" />
+            接收文件
+          </button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  </>
   );
 }

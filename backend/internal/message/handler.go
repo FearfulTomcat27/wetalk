@@ -4,7 +4,6 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -34,7 +33,7 @@ func (h *Handler) Send(c *gin.Context) {
 		return
 	}
 
-	msg, err := h.svc.SendMessage(senderID, req)
+	msgResp, err := h.svc.SendMessage(senderID, req)
 	if err != nil {
 		if errors.Is(err, pkgerrors.ErrInvalidParam) {
 			utils.Error(c, http.StatusBadRequest, "无效的请求参数")
@@ -44,21 +43,33 @@ func (h *Handler) Send(c *gin.Context) {
 		return
 	}
 
-	utils.Success(c, http.StatusCreated, "消息已发送", msg)
-
-	// 若接收者在线，通过 Hub 推送 message.new（扁平格式）
-	if h.hub.IsOnline(msg.ReceiverID) {
-		h.hub.SendTo(msg.ReceiverID, &ws.MessageNewEvent{
-			Type:        ws.TypeMessageNew,
-			ID:          msg.ID,
-			SenderID:    msg.SenderID,
-			ReceiverID:  msg.ReceiverID,
-			Content:     msg.Content,
-			ContentType: msg.ContentType,
-			Status:      msg.Status,
-			CreatedAt:   msg.CreatedAt.Format(time.RFC3339),
+	// 若接收者在线，通过 Hub 推送 message.new
+	if h.hub.IsOnline(msgResp.ReceiverID) {
+		var fileMeta *ws.WSFileMetadata
+		if msgResp.FileMetadata != nil {
+			fileMeta = &ws.WSFileMetadata{
+				URL:          msgResp.FileMetadata.URL,
+				OriginalName: msgResp.FileMetadata.OriginalName,
+				FileSize:     msgResp.FileMetadata.FileSize,
+				MimeType:     msgResp.FileMetadata.MimeType,
+				Width:        msgResp.FileMetadata.Width,
+				Height:       msgResp.FileMetadata.Height,
+			}
+		}
+		h.hub.SendTo(msgResp.ReceiverID, &ws.MessageNewEvent{
+			Type:         ws.TypeMessageNew,
+			ID:           msgResp.ID,
+			SenderID:     msgResp.SenderID,
+			ReceiverID:   msgResp.ReceiverID,
+			Content:      msgResp.Content,
+			ContentType:  msgResp.ContentType,
+			FileMetadata: fileMeta,
+			Status:       msgResp.Status,
+			CreatedAt:    msgResp.CreatedAt,
 		})
 	}
+
+	utils.Success(c, http.StatusCreated, "消息已发送", msgResp)
 }
 
 // Read 标记消息已读
@@ -102,7 +113,7 @@ func (h *Handler) List(c *gin.Context) {
 	}
 
 	if messages == nil {
-		messages = []Message{}
+		messages = []MessageResponse{}
 	}
 
 	utils.Success(c, http.StatusOK, "成功", messages)

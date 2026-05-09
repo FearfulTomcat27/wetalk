@@ -170,6 +170,7 @@ type FriendshipInfo struct {
 	FriendName      string `json:"friend_name"`
 	FriendAvatar    string `json:"friend_avatar"`
 	LastMessage     string `json:"last_message"`
+	LastMessageType string `json:"last_message_type"`
 	LastMessageTime string `json:"last_message_time"`
 	UnreadCount     int    `json:"unread_count"`
 	CreatedAt       string `json:"created_at"`
@@ -199,6 +200,10 @@ func (r *repository) FindFriendships(userID int64) ([]FriendshipInfo, error) {
 		         WHERE ((sender_id = friendships.user1_id AND receiver_id = friendships.user2_id)
 		             OR (sender_id = friendships.user2_id AND receiver_id = friendships.user1_id))
 		         ORDER BY created_at DESC LIMIT 1), '') AS last_message,
+		        COALESCE((SELECT content_type FROM messages
+		         WHERE ((sender_id = friendships.user1_id AND receiver_id = friendships.user2_id)
+		             OR (sender_id = friendships.user2_id AND receiver_id = friendships.user1_id))
+		         ORDER BY created_at DESC LIMIT 1), 'text') AS last_message_type,
 		        COALESCE((SELECT created_at FROM messages
 		         WHERE ((sender_id = friendships.user1_id AND receiver_id = friendships.user2_id)
 		             OR (sender_id = friendships.user2_id AND receiver_id = friendships.user1_id))

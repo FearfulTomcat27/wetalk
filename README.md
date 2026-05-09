@@ -10,6 +10,10 @@
 - WebSocket 实时消息推送（auth frame 认证，心跳保活，断线重连）
 - 乐观 UI 发送（临时消息 + 服务端确认替换）
 - 离线降级（WS 断开时自动切换 HTTP POST）
+- 图片/文件消息（缩略图预览、全屏查看、文件卡片、类型图标、一键下载）
+- Emoji 面板（60 个常用 emoji，点击外部关闭）
+- 消息时间戳智能格式化（昨天/星期几/月日/年月日）
+- 暗色模式主题切换（next-themes）
 - 消息输入框（Enter 发送 / Shift+Enter 换行）
 - 联系人页面，好友添加/搜索/申请/同意/拒绝
 - 好友请求待处理通知
@@ -28,7 +32,7 @@ wetalk/
 │       ├── components/          # 组件 (RouteGuard, Sidebar, ContactList, ChatArea...)
 │       │   └── ui/              # shadcn/ui 组件
 │       ├── stores/              # zustand 状态 (auth, chat)
-│       ├── lib/api/             # 模块化 API 客户端 (axios)
+│       ├── lib/api/             # 模块化 API 客户端 (axios, 含 upload)
 │       └── config/              # 路由权限配置
 ├── backend/                     # Go 1.26 后端
 │   ├── cmd/                     # 入口 main.go
@@ -108,6 +112,8 @@ oss:
 | 缓存 | Redis (go-redis/v9) |
 | 认证 | JWT + bcrypt |
 | 实时通信 | WebSocket (gorilla/websocket, auth frame) |
+| 文件存储 | 阿里云 OSS |
+| 主题 | next-themes (浅色/暗色) |
 | 头像 | DiceBear (micah) + 阿里云 OSS |
 
 ## API 端点
@@ -127,6 +133,7 @@ oss:
 | POST | `/api/messages` | JWT | 发送消息 |
 | GET | `/api/messages?friend_id=` | JWT | 聊天记录（分页） |
 | PUT | `/api/messages/read` | JWT | 标记已读 |
+| POST | `/api/upload` | JWT | 上传文件/图片（≤10MB 图片, ≤20MB 文件） |
 | GET | `/ws` | auth frame | WebSocket 连接（实时推送） |
 | GET | `/ping` | 无 | 健康检查 |
 

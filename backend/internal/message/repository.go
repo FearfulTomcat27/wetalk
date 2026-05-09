@@ -10,13 +10,13 @@ type repository struct{}
 // Repository 消息仓库实例
 var Repository = &repository{}
 
-// Create 创建消息（默认 content_type='text', status='sent'）
-func (r *repository) Create(senderID, receiverID int64, content string) (*Message, error) {
+// Create 创建消息
+func (r *repository) Create(senderID, receiverID int64, content string, contentType string) (*Message, error) {
 	msg := &Message{
 		SenderID:    senderID,
 		ReceiverID:  receiverID,
 		Content:     content,
-		ContentType: ContentTypeText,
+		ContentType: contentType,
 		Status:      StatusSent,
 	}
 	if err := db.DB.Create(msg).Error; err != nil {

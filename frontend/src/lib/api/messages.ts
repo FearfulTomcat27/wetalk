@@ -4,6 +4,16 @@ import type { Message } from "@/types/chat";
 export interface SendMessageRequest {
   receiver_id: number;
   content: string;
+  content_type?: string;
+  client_msg_id?: string;
+  file_metadata?: {
+    url: string;
+    original_name: string;
+    file_size: number;
+    mime_type: string;
+    width?: number;
+    height?: number;
+  };
 }
 
 /** 发送消息 */
