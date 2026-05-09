@@ -11,6 +11,7 @@ import (
 
 	"wetalk/config"
 	"wetalk/db"
+	"wetalk/internal/chat"
 	"wetalk/internal/friend"
 	"wetalk/internal/message"
 	"wetalk/internal/router"
@@ -39,19 +40,23 @@ func main() {
 	defer db.CloseRedis()
 
 	// 创建 Hub 并启动
-	hub := ws.NewHub()
+	hub := ws.NewHub(nil)
 	go hub.Run()
 
 	// 初始化 OSS 客户端
 	ossClient := oss.NewClient(cfg.OSS)
 
 	// 创建服务
-	msgSvc := message.NewService()
+	chatSvc := chat.NewService()
+	msgSvc := message.NewService(chatSvc)
 	userSvc := user.NewService(cfg.JWT.Secret, cfg.JWT.ExpireHours, ossClient)
-	friendSvc := friend.NewService()
+	friendSvc := friend.NewService(chatSvc)
+
+	// 注入 getMemberIDs 回调到 Hub（打破 ws → chat 循环依赖）
+	hub.SetGetMemberIDs(chatSvc.GetMemberIDs)
 
 	// WS 发送消息回调（桥接 ws 包与 message 包，避免循环依赖）
-	sendMsgFunc := func(senderID int64, receiverID int64, content string, contentType string, clientMsgID string, fileMetadata *ws.WSFileMetadata) (*ws.SentMessage, error) {
+	sendMsgFunc := func(senderID int64, chatID int64, content string, contentType string, clientMsgID string, fileMetadata *ws.WSFileMetadata) (*ws.SentMessage, error) {
 		var filePayload *message.FileMetadataPayload
 		if fileMetadata != nil {
 			filePayload = &message.FileMetadataPayload{
@@ -64,7 +69,7 @@ func main() {
 			}
 		}
 		msgResp, err := msgSvc.SendMessage(senderID, message.SendMessageRequest{
-			ReceiverID:   receiverID,
+			ChatID:       chatID,
 			Content:      content,
 			ContentType:  contentType,
 			FileMetadata: filePayload,
@@ -85,8 +90,8 @@ func main() {
 		}
 		return &ws.SentMessage{
 			ID:           msgResp.ID,
+			ChatID:       msgResp.ChatID,
 			SenderID:     msgResp.SenderID,
-			ReceiverID:   msgResp.ReceiverID,
 			Content:      msgResp.Content,
 			ContentType:  msgResp.ContentType,
 			FileMetadata: meta,
@@ -98,7 +103,7 @@ func main() {
 	// 创建 Handler
 	userHandler := user.NewHandler(userSvc)
 	friendHandler := friend.NewHandler(friendSvc)
-	msgHandler := message.NewHandler(msgSvc, hub)
+	msgHandler := message.NewHandler(msgSvc, chatSvc, hub)
 	uploadHandler := message.NewUploadHandler(ossClient)
 
 	// 注册路由

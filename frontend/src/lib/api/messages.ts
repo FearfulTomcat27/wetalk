@@ -2,7 +2,7 @@ import { request } from "./request";
 import type { Message } from "@/types/chat";
 
 export interface SendMessageRequest {
-  receiver_id: number;
+  chat_id: number;
   content: string;
   content_type?: string;
   client_msg_id?: string;
@@ -25,24 +25,24 @@ export function sendMessage(data: SendMessageRequest) {
   });
 }
 
-/** 标记来自某用户的消息为已读 */
-export function markAsRead(senderId: number) {
+/** 标记某个聊天的消息为已读 */
+export function markAsRead(chatId: number) {
   return request({
     method: "PUT",
     url: "/api/messages/read",
-    data: { sender_id: senderId },
+    data: { chat_id: chatId },
   });
 }
 
-/** 获取与某联系人的历史消息 */
+/** 获取某个聊天的历史消息 */
 export function getMessages(
-  friendId: number,
+  chatId: number,
   before?: number,
   limit?: number,
 ) {
   return request<Message[]>({
     method: "GET",
     url: "/api/messages",
-    params: { friend_id: friendId, before, limit },
+    params: { chat_id: chatId, before, limit },
   });
 }

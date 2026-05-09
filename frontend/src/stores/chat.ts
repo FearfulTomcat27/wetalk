@@ -26,7 +26,7 @@ function formatMessagePreview(content: string, contentType?: string): string {
 interface ChatState {
   contacts: Contact[];
   activeContactId: number | null;
-  /** contactId → Message[] */
+  /** chatId → Message[] */
   messages: Record<number, Message[]>;
   /** contactId → 输入框草稿文本 */
   inputTexts: Record<number, string>;
@@ -41,7 +41,7 @@ interface ChatState {
   sendMessage: () => void;
   sendMediaMessage: (content: string, contentType: string, fileMetadata?: FileMetadata) => void;
   addContact: (contact: Contact) => void;
-  loadMessages: (contactId: number, msgs: Message[]) => void;
+  loadMessages: (chatId: number, msgs: Message[]) => void;
   receiveMessage: (msg: Message) => void;
   updateMessageStatus: (clientMsgId: string, serverMsg: Message) => void;
   setConnected: (connected: boolean) => void;
@@ -88,12 +88,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return;
     }
 
+    const activeContact = contacts.find((c) => c.id === activeContactId);
+    const chatId = activeContact?.chat_id;
+    if (!chatId) {
+      return;
+    }
+
     const currentUserId = useAuthStore.getState().user?.id ?? 0;
     const clientMsgId = `c_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const tempMsg: Message = {
       id: -Date.now(),
+      chat_id: chatId,
       sender_id: currentUserId,
-      receiver_id: activeContactId,
       content: text,
       created_at: new Date().toISOString(),
       client_msg_id: clientMsgId,
@@ -103,8 +109,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set((state) => ({
       messages: {
         ...state.messages,
-        [activeContactId]: [
-          ...(state.messages[activeContactId] || []),
+        [chatId]: [
+          ...(state.messages[chatId] || []),
           tempMsg,
         ],
       },
@@ -116,7 +122,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     if (connected) {
       wsClient.send("message.send", {
-        receiver_id: activeContactId,
+        chat_id: chatId,
         content: text,
         client_msg_id: clientMsgId,
       });
@@ -125,7 +131,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       set((state) => ({
         sending: { ...state.sending, [activeContactId]: true },
       }));
-      sendMessageAPI({ receiver_id: activeContactId, content: text })
+      sendMessageAPI({ chat_id: chatId, content: text })
         .then((res) => {
           const serverMsg = res.data!;
           get().updateMessageStatus(clientMsgId, serverMsg);
@@ -147,14 +153,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return;
     }
 
+    const activeContact = contacts.find((c) => c.id === activeContactId);
+    const chatId = activeContact?.chat_id;
+    if (!chatId) {
+      return;
+    }
+
     const currentUserId = useAuthStore.getState().user?.id ?? 0;
     const clientMsgId = `c_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const lastMsgLabel = fileMetadata?.original_name ? `[文件] ${fileMetadata.original_name}` : formatMessagePreview(content, contentType);
 
     const tempMsg: Message = {
       id: -Date.now(),
+      chat_id: chatId,
       sender_id: currentUserId,
-      receiver_id: activeContactId,
       content,
       content_type: contentType,
       created_at: new Date().toISOString(),
@@ -165,8 +177,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set((state) => ({
       messages: {
         ...state.messages,
-        [activeContactId]: [
-          ...(state.messages[activeContactId] || []),
+        [chatId]: [
+          ...(state.messages[chatId] || []),
           tempMsg,
         ],
       },
@@ -184,7 +196,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     if (connected) {
       wsClient.send("message.send", {
-        receiver_id: activeContactId,
+        chat_id: chatId,
         content,
         content_type: contentType,
         client_msg_id: clientMsgId,
@@ -194,7 +206,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       set((state) => ({
         sending: { ...state.sending, [activeContactId]: true },
       }));
-      sendMessageAPI({ receiver_id: activeContactId, content, content_type: contentType, client_msg_id: clientMsgId, file_metadata: fmPayload })
+      sendMessageAPI({ chat_id: chatId, content, content_type: contentType, client_msg_id: clientMsgId, file_metadata: fmPayload })
         .then((res) => {
           const serverMsg = res.data!;
           get().updateMessageStatus(clientMsgId, serverMsg);
@@ -217,27 +229,33 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
   },
 
-  loadMessages: (contactId: number, msgs: Message[]) => {
+  loadMessages: (chatId: number, msgs: Message[]) => {
     set((state) => ({
-      messages: { ...state.messages, [contactId]: msgs },
+      messages: { ...state.messages, [chatId]: msgs },
     }));
   },
 
   receiveMessage: (msg: Message) => {
     set((state) => {
-      const existing = state.messages[msg.sender_id] || [];
+      // 根据 chat_id 查找对应联系人
+      const contact = state.contacts.find((c) => c.chat_id === msg.chat_id);
+      if (!contact) {
+        return state;
+      }
+
+      const existing = state.messages[msg.chat_id] || [];
       if (existing.some((m) => m.id === msg.id)) {
         return state;
       }
-      const isActive = state.activeContactId === msg.sender_id;
+      const isActive = state.activeContactId === contact.id;
       const lastMsgLabel = formatMessagePreview(msg.content, msg.content_type);
       return {
         messages: {
           ...state.messages,
-          [msg.sender_id]: [...existing, msg],
+          [msg.chat_id]: [...existing, msg],
         },
         contacts: state.contacts.map((c) =>
-          c.id === msg.sender_id
+          c.chat_id === msg.chat_id
             ? { ...c, lastMessage: lastMsgLabel, lastMessageTime: msg.created_at, unread: isActive ? c.unread : c.unread + 1 }
             : c
         ),

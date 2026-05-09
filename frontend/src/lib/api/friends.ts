@@ -1,8 +1,9 @@
 import { request } from "./request";
 import type { UserInfo } from "./users";
 
-/** 好友信息 — 匹配后端 { friend_id, friend_name, friend_avatar, created_at, last_message, last_message_time, unread_count } */
+/** 好友信息 — 匹配后端 { chat_id, friend_id, friend_name, friend_avatar, created_at, last_message, last_message_time, unread_count } */
 export interface FriendInfo {
+  chat_id: number;
   friend_id: number;
   friend_name: string;
   friend_avatar?: string;

@@ -163,9 +163,10 @@ func (r *repository) FindPendingByUserID(userID int64) ([]PendingRequest, error)
 
 // ========== friendships 表（已建立的好友关系） ==========
 
-// FriendshipInfo 好友信息（从 friendships 表查询，JOIN users 获取对方信息）
+// FriendshipInfo 好友信息（从 friendships 表查询，JOIN users + LEFT JOIN chats 获取信息）
 type FriendshipInfo struct {
 	ID              int64  `json:"id"`
+	ChatID          int64  `json:"chat_id"`
 	FriendID        int64  `json:"friend_id"`
 	FriendName      string `json:"friend_name"`
 	FriendAvatar    string `json:"friend_avatar"`
@@ -177,50 +178,57 @@ type FriendshipInfo struct {
 }
 
 // CreateFriendship 创建好友关系（小 ID 在前，防重）
-func (r *repository) CreateFriendship(user1ID, user2ID int64) error {
+func (r *repository) CreateFriendship(user1ID, user2ID int64) (*Friendship, error) {
 	smaller, larger := sortIDs(user1ID, user2ID)
 	friendship := &Friendship{
 		User1ID: smaller,
 		User2ID: larger,
 	}
 	// FirstOrCreate: 若已存在则直接返回，防止重复插入
-	return db.DB.Where("user1_id = ? AND user2_id = ?", smaller, larger).
-		FirstOrCreate(friendship).Error
+	if err := db.DB.Where("user1_id = ? AND user2_id = ?", smaller, larger).
+		FirstOrCreate(friendship).Error; err != nil {
+		return nil, err
+	}
+	return friendship, nil
 }
 
-// FindFriendships 查询用户的所有好友（JOIN users，含 last_message 和 unread_count 子查询）
+// FindFriendships 查询用户的所有好友（JOIN users + LEFT JOIN chats，使用 chat 模型简化查询）
 func (r *repository) FindFriendships(userID int64) ([]FriendshipInfo, error) {
 	var friendships []FriendshipInfo
 	err := db.DB.Table("friendships").
 		Select(`friendships.id,
+		        friendships.chat_id,
 		        CASE WHEN friendships.user1_id = ? THEN friendships.user2_id ELSE friendships.user1_id END AS friend_id,
 		        users.nickname AS friend_name,
 		        users.avatar AS friend_avatar,
-		        COALESCE((SELECT content FROM messages
-		         WHERE ((sender_id = friendships.user1_id AND receiver_id = friendships.user2_id)
-		             OR (sender_id = friendships.user2_id AND receiver_id = friendships.user1_id))
-		         ORDER BY created_at DESC LIMIT 1), '') AS last_message,
-		        COALESCE((SELECT content_type FROM messages
-		         WHERE ((sender_id = friendships.user1_id AND receiver_id = friendships.user2_id)
-		             OR (sender_id = friendships.user2_id AND receiver_id = friendships.user1_id))
-		         ORDER BY created_at DESC LIMIT 1), 'text') AS last_message_type,
-		        COALESCE((SELECT created_at FROM messages
-		         WHERE ((sender_id = friendships.user1_id AND receiver_id = friendships.user2_id)
-		             OR (sender_id = friendships.user2_id AND receiver_id = friendships.user1_id))
-		         ORDER BY created_at DESC LIMIT 1), '') AS last_message_time,
-		        (SELECT COUNT(*) FROM messages
-		         WHERE receiver_id = ?
-		           AND sender_id = CASE WHEN friendships.user1_id = ? THEN friendships.user2_id ELSE friendships.user1_id END
-		           AND status != 'read') AS unread_count,
-		        friendships.created_at`, userID, userID, userID).
+		        COALESCE(chats.last_message_text, '') AS last_message,
+		        COALESCE(last_msg.content_type, 'text') AS last_message_type,
+		        COALESCE(chats.last_message_time, '') AS last_message_time,
+		        COALESCE(unread.cnt, 0) AS unread_count,
+		        friendships.created_at`, userID).
 		Joins("JOIN users ON users.id = CASE WHEN friendships.user1_id = ? THEN friendships.user2_id ELSE friendships.user1_id END", userID).
+		Joins("LEFT JOIN chats ON chats.id = friendships.chat_id").
+		Joins("LEFT JOIN messages last_msg ON last_msg.id = chats.last_message_id").
+		Joins(`LEFT JOIN (
+			SELECT chat_id, COUNT(*) AS cnt
+			FROM messages
+			WHERE sender_id != ? AND status != 'read'
+			GROUP BY chat_id
+		) unread ON unread.chat_id = friendships.chat_id`, userID).
 		Where("friendships.user1_id = ? OR friendships.user2_id = ?", userID, userID).
-		Order("friendships.created_at DESC").
+		Order("COALESCE(chats.last_message_time, friendships.created_at) DESC").
 		Scan(&friendships).Error
 	if err != nil {
 		return nil, err
 	}
 	return friendships, nil
+}
+
+// UpdateFriendshipChatID 关联 chat 到 friendships
+func (r *repository) UpdateFriendshipChatID(friendshipID, chatID int64) error {
+	return db.DB.Model(&Friendship{}).
+		Where("id = ?", friendshipID).
+		Update("chat_id", chatID).Error
 }
 
 // DeleteFriendship 删除好友关系

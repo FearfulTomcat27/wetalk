@@ -17,8 +17,8 @@ const (
 // Message 消息模型
 type Message struct {
 	ID          int64     `json:"id" gorm:"primaryKey;autoIncrement"`
-	SenderID    int64     `json:"sender_id" gorm:"column:sender_id;not null;index:idx_sender_receiver"`
-	ReceiverID  int64     `json:"receiver_id" gorm:"column:receiver_id;not null;index:idx_receiver_sender"`
+	ChatID      int64     `json:"chat_id" gorm:"column:chat_id;not null;index:idx_chat_created"`
+	SenderID    int64     `json:"sender_id" gorm:"column:sender_id;not null;index:idx_chat_created"`
 	Content     string    `json:"content" gorm:"column:content;type:text;not null"`
 	ContentType string    `json:"content_type" gorm:"column:content_type;type:varchar(16);not null;default:text"`
 	Status      string    `json:"status" gorm:"column:status;type:varchar(16);not null;default:sent"`

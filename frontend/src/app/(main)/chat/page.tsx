@@ -41,6 +41,7 @@ function formatMessagePreview(content: string, contentType?: string): string {
 function friendToContact(f: FriendInfo): Contact {
   return {
     id: f.friend_id,
+    chat_id: f.chat_id,
     username: f.friend_name,
     nickname: f.friend_name,
     avatar: f.friend_avatar,
@@ -118,8 +119,13 @@ export default function ChatPage() {
     async function load() {
       setMessagesLoading(true);
       try {
-        const res = await getMessages(activeContactId!);
-        loadMessages(activeContactId!, (res.data || []).slice().reverse());
+        const activeChatId = contacts.find((c) => c.id === activeContactId)?.chat_id;
+        if (!activeChatId) {
+          setMessagesLoading(false);
+          return;
+        }
+        const res = await getMessages(activeChatId);
+        loadMessages(activeChatId, (res.data || []).slice().reverse());
       } catch {
         // 错误已在拦截器 toast
       } finally {
@@ -127,7 +133,7 @@ export default function ChatPage() {
       }
     }
     load();
-  }, [activeContactId, loadMessages]);
+  }, [activeContactId, loadMessages, contacts]);
 
   // 选中联系人时自动聚焦输入框
   useEffect(() => {
@@ -171,13 +177,16 @@ export default function ChatPage() {
 
   function handleSelectContact(id: number) {
     selectContact(id);
-    markAsRead(id).catch(() => {});
+    const chatId = contacts.find((c) => c.id === id)?.chat_id;
+    if (chatId) {
+      markAsRead(chatId).catch(() => {});
+    }
   }
 
   const chatInputValue = activeContactId ? (inputTexts[activeContactId] ?? "") : "";
   const isSending = activeContactId ? (sending[activeContactId] ?? false) : false;
   const activeContact = contacts.find((c) => c.id === activeContactId) ?? null;
-  const activeMessages = activeContactId ? messages[activeContactId] ?? [] : [];
+  const activeMessages = activeContact ? messages[activeContact.chat_id] ?? [] : [];
 
   // --- 拖拽处理 ---
   const handleMouseDown = useCallback((e: ReactMouseEvent) => {

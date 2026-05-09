@@ -17,13 +17,13 @@ const (
 )
 
 // SendMessageFunc 发送消息回调函数类型（避免 ws → message 循环依赖）
-type SendMessageFunc func(senderID int64, receiverID int64, content string, contentType string, clientMsgID string, fileMetadata *WSFileMetadata) (*SentMessage, error)
+type SendMessageFunc func(senderID int64, chatID int64, content string, contentType string, clientMsgID string, fileMetadata *WSFileMetadata) (*SentMessage, error)
 
 // SentMessage 回调返回的消息数据
 type SentMessage struct {
 	ID           int64
+	ChatID       int64
 	SenderID     int64
-	ReceiverID   int64
 	Content      string
 	ContentType  string
 	FileMetadata *WSFileMetadata
@@ -190,7 +190,7 @@ func (c *Client) sendAuthError(msg string) {
 
 // handleMessageSend 处理发送消息
 func (c *Client) handleMessageSend(req *MessageSendRequest) {
-	msg, err := c.sendMsg(c.userID, req.ReceiverID, req.Content, req.ContentType, req.ClientMsgID, req.FileMetadata)
+	msg, err := c.sendMsg(c.userID, req.ChatID, req.Content, req.ContentType, req.ClientMsgID, req.FileMetadata)
 	if err != nil {
 		c.send <- &ErrorEvent{Type: TypeError, Message: "发送消息失败"}
 		return
@@ -200,8 +200,8 @@ func (c *Client) handleMessageSend(req *MessageSendRequest) {
 	c.send <- &MessageSentEvent{
 		Type:         TypeMessageSent,
 		ID:           msg.ID,
+		ChatID:       msg.ChatID,
 		SenderID:     msg.SenderID,
-		ReceiverID:   msg.ReceiverID,
 		Content:      msg.Content,
 		ContentType:  msg.ContentType,
 		FileMetadata: msg.FileMetadata,
@@ -210,12 +210,12 @@ func (c *Client) handleMessageSend(req *MessageSendRequest) {
 		ClientMsgID:  req.ClientMsgID,
 	}
 
-	// 发送 message.new 给接收者
-	c.hub.SendTo(req.ReceiverID, &MessageNewEvent{
+	// 发送 message.new 给聊天所有成员（Hub 内部处理广播）
+	c.hub.SendToChat(req.ChatID, c.userID, &MessageNewEvent{
 		Type:         TypeMessageNew,
 		ID:           msg.ID,
+		ChatID:       msg.ChatID,
 		SenderID:     msg.SenderID,
-		ReceiverID:   msg.ReceiverID,
 		Content:      msg.Content,
 		ContentType:  msg.ContentType,
 		FileMetadata: msg.FileMetadata,

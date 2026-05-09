@@ -21,6 +21,7 @@ const MIN_DETAIL_WIDTH = 300;
 function mapFriendToContact(f: FriendInfo): Contact {
   return {
     id: f.friend_id,
+    chat_id: f.chat_id,
     username: f.friend_name,
     nickname: f.friend_name,
     avatar: f.friend_avatar,

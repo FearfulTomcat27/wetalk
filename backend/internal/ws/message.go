@@ -36,7 +36,7 @@ type WSFileMetadata struct {
 // MessageSendRequest 发送消息请求
 type MessageSendRequest struct {
 	Type         string          `json:"type"`
-	ReceiverID   int64           `json:"receiver_id"`
+	ChatID       int64           `json:"chat_id"`
 	Content      string          `json:"content"`
 	ContentType  string          `json:"content_type,omitempty"`
 	ClientMsgID  string          `json:"client_msg_id,omitempty"`
@@ -62,12 +62,12 @@ type ErrorEvent struct {
 	Message string `json:"message"`
 }
 
-// MessageNewEvent 新消息通知（发给接收者）
+// MessageNewEvent 新消息通知（发给聊天所有成员）
 type MessageNewEvent struct {
 	Type         string          `json:"type"`
 	ID           int64           `json:"id"`
+	ChatID       int64           `json:"chat_id"`
 	SenderID     int64           `json:"sender_id"`
-	ReceiverID   int64           `json:"receiver_id"`
 	Content      string          `json:"content"`
 	ContentType  string          `json:"content_type"`
 	FileMetadata *WSFileMetadata `json:"file_metadata,omitempty"`
@@ -79,8 +79,8 @@ type MessageNewEvent struct {
 type MessageSentEvent struct {
 	Type         string          `json:"type"`
 	ID           int64           `json:"id"`
+	ChatID       int64           `json:"chat_id"`
 	SenderID     int64           `json:"sender_id"`
-	ReceiverID   int64           `json:"receiver_id"`
 	Content      string          `json:"content"`
 	ContentType  string          `json:"content_type"`
 	FileMetadata *WSFileMetadata `json:"file_metadata,omitempty"`

@@ -1,5 +1,6 @@
 export interface Contact {
   id: number;
+  chat_id: number;
   username: string;
   nickname: string;
   avatar?: string;
@@ -9,11 +10,11 @@ export interface Contact {
   unread: number;
 }
 
-/** 匹配后端 JSON: { id, sender_id, receiver_id, content, content_type, status, created_at } */
+/** 匹配后端 JSON: { id, chat_id, sender_id, content, content_type, status, created_at } */
 export interface Message {
   id: number;
+  chat_id: number;
   sender_id: number;
-  receiver_id: number;
   content: string;
   content_type?: string;
   status?: string;

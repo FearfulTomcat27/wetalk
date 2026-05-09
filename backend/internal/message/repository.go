@@ -11,10 +11,10 @@ type repository struct{}
 var Repository = &repository{}
 
 // Create 创建消息
-func (r *repository) Create(senderID, receiverID int64, content string, contentType string) (*Message, error) {
+func (r *repository) Create(senderID, chatID int64, content string, contentType string) (*Message, error) {
 	msg := &Message{
 		SenderID:    senderID,
-		ReceiverID:  receiverID,
+		ChatID:      chatID,
 		Content:     content,
 		ContentType: contentType,
 		Status:      StatusSent,
@@ -25,20 +25,17 @@ func (r *repository) Create(senderID, receiverID int64, content string, contentT
 	return msg, nil
 }
 
-// MarkAsRead 将发送者发给接收者的未读消息标记为已读
-func (r *repository) MarkAsRead(senderID, receiverID int64) error {
+// MarkAsRead 将聊天中对方发来的未读消息标记为已读
+func (r *repository) MarkAsRead(chatID, currentUserID int64) error {
 	return db.DB.Model(&Message{}).
-		Where("sender_id = ? AND receiver_id = ? AND status != ?", senderID, receiverID, StatusRead).
+		Where("chat_id = ? AND sender_id != ? AND status != ?", chatID, currentUserID, StatusRead).
 		Update("status", StatusRead).Error
 }
 
-// ListByUsers 获取两个用户之间的消息记录（分页）
-func (r *repository) ListByUsers(userID1, userID2 int64, offset, limit int) ([]Message, error) {
+// ListByChat 获取聊天消息记录（分页，按时间倒序）
+func (r *repository) ListByChat(chatID int64, offset, limit int) ([]Message, error) {
 	var messages []Message
-	err := db.DB.Where(
-		"(sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?)",
-		userID1, userID2, userID2, userID1,
-	).
+	err := db.DB.Where("chat_id = ?", chatID).
 		Order("created_at DESC").
 		Offset(offset).
 		Limit(limit).
@@ -47,4 +44,16 @@ func (r *repository) ListByUsers(userID1, userID2 int64, offset, limit int) ([]M
 		return nil, err
 	}
 	return messages, nil
+}
+
+// CountUnread 统计聊天中当前用户未读的消息数
+func (r *repository) CountUnread(chatID, currentUserID int64) (int64, error) {
+	var count int64
+	err := db.DB.Model(&Message{}).
+		Where("chat_id = ? AND sender_id != ? AND status != ?", chatID, currentUserID, StatusRead).
+		Count(&count).Error
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
 }

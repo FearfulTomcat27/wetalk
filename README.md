@@ -40,7 +40,7 @@ wetalk/
 │   ├── config/                  # 配置加载
 │   ├── db/                      # MySQL + Redis 连接
 │   ├── pkg/                     # 公共包 (errors, utils, oss)
-│   └── scripts/migrations/      # SQL 迁移
+│   └── sql                      # SQL 脚本 (建表)
 └── CLAUDE.md                    # AI 助手指南
 ```
 

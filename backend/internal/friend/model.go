@@ -27,6 +27,7 @@ func (FriendRequest) TableName() string {
 // Friendship 已建立的好友关系模型
 type Friendship struct {
 	ID        int64     `json:"id" gorm:"primaryKey;autoIncrement"`
+	ChatID    int64     `json:"chat_id" gorm:"column:chat_id;not null;index"`
 	User1ID   int64     `json:"user1_id" gorm:"column:user1_id;not null;uniqueIndex:uk_user1_user2;index"`
 	User2ID   int64     `json:"user2_id" gorm:"column:user2_id;not null;uniqueIndex:uk_user1_user2;index"`
 	CreatedAt time.Time `json:"created_at" gorm:"column:created_at;autoCreateTime"`

@@ -5,22 +5,27 @@ import (
 	"sync"
 )
 
+// GetMemberIDsFunc 获取聊天成员ID列表的回调类型（避免 ws → chat 循环依赖）
+type GetMemberIDsFunc func(chatID int64) ([]int64, error)
+
 // Hub 管理 WebSocket 连接
 type Hub struct {
-	clients    map[int64]*Client
-	register   chan *Client
-	unregister chan *Client
-	mu         sync.RWMutex
-	done       chan struct{}
+	clients      map[int64]*Client
+	register     chan *Client
+	unregister   chan *Client
+	mu           sync.RWMutex
+	done         chan struct{}
+	getMemberIDs GetMemberIDsFunc
 }
 
 // NewHub 创建 Hub 实例
-func NewHub() *Hub {
+func NewHub(getMemberIDs GetMemberIDsFunc) *Hub {
 	return &Hub{
-		clients:    make(map[int64]*Client),
-		register:   make(chan *Client),
-		unregister: make(chan *Client),
-		done:       make(chan struct{}),
+		clients:      make(map[int64]*Client),
+		register:     make(chan *Client),
+		unregister:   make(chan *Client),
+		done:         make(chan struct{}),
+		getMemberIDs: getMemberIDs,
 	}
 }
 
@@ -76,6 +81,29 @@ func (h *Hub) SendTo(userID int64, msg interface{}) {
 	default:
 		log.Printf("client %d send channel full, dropping message", userID)
 	}
+}
+
+// SendToChat 向聊天所有在线成员广播消息（排除发送者）
+func (h *Hub) SendToChat(chatID, senderID int64, msg interface{}) {
+	if h.getMemberIDs == nil {
+		return
+	}
+	memberIDs, err := h.getMemberIDs(chatID)
+	if err != nil {
+		log.Printf("get member ids for chat %d: %v", chatID, err)
+		return
+	}
+	for _, memberID := range memberIDs {
+		// 不再发回给发送者（发送者已通过 message.sent 拿到确认）
+		if memberID != senderID {
+			h.SendTo(memberID, msg)
+		}
+	}
+}
+
+// SetGetMemberIDs 设置获取成员 ID 的回调（用于打破循环依赖）
+func (h *Hub) SetGetMemberIDs(fn GetMemberIDsFunc) {
+	h.getMemberIDs = fn
 }
 
 // IsOnline 检查用户是否在线
