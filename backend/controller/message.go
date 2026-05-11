@@ -32,18 +32,15 @@ func (h *MessageHandler) Send(c *gin.Context) {
 
 	var req model.SendMessageRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		common.Error(c, http.StatusBadRequest, "参数校验失败: "+err.Error())
+		common.AppError(c, types.NewInvalidParamf(err.Error()))
 		return
 	}
 
 	msgResp, err := h.svc.SendMessage(senderID, req)
 	if err != nil {
-		if errors.Is(err, types.ErrInvalidParam) {
-			common.Error(c, http.StatusBadRequest, "无效的请求参数")
-			return
-		}
-		if errors.Is(err, types.ErrUnauthorized) {
-			common.Error(c, http.StatusForbidden, "不是聊天成员")
+		var appErr *types.AppError
+		if errors.As(err, &appErr) {
+			common.AppError(c, appErr)
 			return
 		}
 		common.Error(c, http.StatusInternalServerError, "发送消息失败")
@@ -95,7 +92,7 @@ func (h *MessageHandler) Read(c *gin.Context) {
 		ChatID int64 `json:"chat_id" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		common.Error(c, http.StatusBadRequest, "参数校验失败: "+err.Error())
+		common.AppError(c, types.NewInvalidParamf(err.Error()))
 		return
 	}
 
@@ -114,7 +111,7 @@ func (h *MessageHandler) List(c *gin.Context) {
 	chatIDStr := c.Query("chat_id")
 	chatID, err := strconv.ParseInt(chatIDStr, 10, 64)
 	if err != nil || chatID == 0 {
-		common.Error(c, http.StatusBadRequest, "缺少 chat_id 参数")
+		common.AppError(c, types.NewInvalidParamf("缺少 chat_id 参数"))
 		return
 	}
 

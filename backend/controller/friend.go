@@ -30,18 +30,15 @@ func (h *FriendHandler) Add(c *gin.Context) {
 
 	var req model.AddFriendRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		common.Error(c, http.StatusBadRequest, "参数校验失败: "+err.Error())
+		common.AppError(c, types.NewInvalidParamf(err.Error()))
 		return
 	}
 
 	friend, err := h.svc.AddFriend(userID, req)
 	if err != nil {
-		if errors.Is(err, types.ErrInvalidParam) {
-			common.Error(c, http.StatusBadRequest, "不能添加自己为好友")
-			return
-		}
-		if errors.Is(err, types.ErrConflict) {
-			common.Error(c, http.StatusConflict, "好友请求已存在")
+		var appErr *types.AppError
+		if errors.As(err, &appErr) {
+			common.AppError(c, appErr)
 			return
 		}
 		common.Error(c, http.StatusInternalServerError, "添加好友失败")
@@ -75,21 +72,14 @@ func (h *FriendHandler) Accept(c *gin.Context) {
 	idStr := c.Param("id")
 	friendID, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		common.Error(c, http.StatusBadRequest, "无效的请求 ID")
+		common.AppError(c, types.NewInvalidParamf("无效的请求 ID"))
 		return
 	}
 
 	if err := h.svc.AcceptFriend(userID, friendID); err != nil {
-		if errors.Is(err, types.ErrNotFound) {
-			common.Error(c, http.StatusNotFound, "好友请求不存在")
-			return
-		}
-		if errors.Is(err, types.ErrUnauthorized) {
-			common.Error(c, http.StatusForbidden, "无权操作")
-			return
-		}
-		if errors.Is(err, types.ErrConflict) {
-			common.Error(c, http.StatusConflict, "请求已处理")
+		var appErr *types.AppError
+		if errors.As(err, &appErr) {
+			common.AppError(c, appErr)
 			return
 		}
 		common.Error(c, http.StatusInternalServerError, "接受好友请求失败")
@@ -123,17 +113,14 @@ func (h *FriendHandler) Delete(c *gin.Context) {
 	idStr := c.Param("id")
 	friendID, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		common.Error(c, http.StatusBadRequest, "无效的 ID")
+		common.AppError(c, types.NewInvalidParamf("无效的 ID"))
 		return
 	}
 
 	if err := h.svc.DeleteFriend(userID, friendID); err != nil {
-		if errors.Is(err, types.ErrNotFound) {
-			common.Error(c, http.StatusNotFound, "好友关系不存在")
-			return
-		}
-		if errors.Is(err, types.ErrUnauthorized) {
-			common.Error(c, http.StatusForbidden, "无权操作")
+		var appErr *types.AppError
+		if errors.As(err, &appErr) {
+			common.AppError(c, appErr)
 			return
 		}
 		common.Error(c, http.StatusInternalServerError, "删除好友失败")

@@ -111,7 +111,7 @@ export default function ChatPage() {
         setActiveContactId(contactId);
       }
     }
-  }, [searchParams, contacts.length, setActiveContactId]);
+  }, [searchParams, contacts, setActiveContactId]);
 
   // 选中联系人时加载历史消息 → 写入 store
   useEffect(() => {

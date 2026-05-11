@@ -42,7 +42,7 @@ func (s *UserService) Register(req model.RegisterRequest) (*model.AuthResponse, 
 		return nil, err
 	}
 	if existUser != nil {
-		return nil, types.ErrConflict
+		return nil, types.ErrUserAlreadyExists
 	}
 
 	// bcrypt 加密密码
@@ -88,12 +88,12 @@ func (s *UserService) Login(req model.LoginRequest) (*model.AuthResponse, error)
 		return nil, err
 	}
 	if user == nil {
-		return nil, types.ErrUnauthorized
+		return nil, types.ErrInvalidCredentials
 	}
 
 	// 验证密码
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
-		return nil, types.ErrUnauthorized
+		return nil, types.ErrInvalidCredentials
 	}
 
 	// 生成 JWT
@@ -138,7 +138,7 @@ func (s *UserService) generateToken(u *model.User) (string, error) {
 func (s *UserService) UploadAvatar(ctx context.Context, userID int64, file io.Reader, filename string, size int64) (string, error) {
 	// 校验文件大小 ≤ 2MB
 	if size > 2*1024*1024 {
-		return "", types.ErrInvalidParam
+		return "", types.ErrAvatarTooLarge
 	}
 
 	// 校验文件扩展名（忽略大小写）
@@ -154,7 +154,7 @@ func (s *UserService) UploadAvatar(ctx context.Context, userID int64, file io.Re
 	case ".webp":
 		contentType = "image/webp"
 	default:
-		return "", types.ErrInvalidParam
+		return "", types.ErrInvalidAvatarFormat
 	}
 
 	// 生成 OSS key: avatars/{uid}/{uuid}.{ext}

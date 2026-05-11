@@ -29,7 +29,7 @@ func (s *MessageService) SendMessage(senderID int64, req model.SendMessageReques
 		return nil, err
 	}
 	if !isMember {
-		return nil, types.ErrUnauthorized
+		return nil, types.ErrNotChatMember
 	}
 
 	// 如果设置了 quoted_message_id，验证引用的消息存在且属于同一聊天
@@ -39,7 +39,7 @@ func (s *MessageService) SendMessage(senderID int64, req model.SendMessageReques
 			return nil, err
 		}
 		if quoted == nil || quoted.ChatID != req.ChatID {
-			return nil, types.ErrInvalidParam
+			return nil, types.ErrQuotedMessageNotFound
 		}
 	}
 

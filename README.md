@@ -36,11 +36,17 @@ wetalk/
 │       └── config/              # 路由权限配置
 ├── backend/                     # Go 1.26 后端
 │   ├── cmd/                     # 入口 main.go
-│   ├── internal/                # 业务模块 (router, user, friend, message, ws, middleware)
 │   ├── config/                  # 配置加载
 │   ├── db/                      # MySQL + Redis 连接
-│   ├── pkg/                     # 公共包 (errors, utils, oss)
-│   └── sql                      # SQL 脚本 (建表)
+│   ├── controller/              # HTTP Handler 层
+│   ├── service/                 # 业务逻辑层
+│   ├── dto/                     # 数据访问层
+│   ├── model/                   # 数据模型
+│   ├── common/                  # 共享工具
+│   ├── type/                    # 类型定义 (AppError 业务错误码)
+│   ├── middleware/               # JWT 认证中间件
+│   ├── ws/                      # WebSocket
+│   └── scripts/migrations/      # SQL 脚本 (建表)
 └── CLAUDE.md                    # AI 助手指南
 ```
 

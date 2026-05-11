@@ -29,14 +29,15 @@ func NewUserHandler(svc *service.UserService) *UserHandler {
 func (h *UserHandler) Register(c *gin.Context) {
 	var req model.RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		common.Error(c, http.StatusBadRequest, "参数校验失败: "+err.Error())
+		common.AppError(c, types.NewInvalidParamf(err.Error()))
 		return
 	}
 
 	resp, err := h.svc.Register(req)
 	if err != nil {
-		if errors.Is(err, types.ErrConflict) {
-			common.Error(c, http.StatusConflict, "用户名已存在")
+		var appErr *types.AppError
+		if errors.As(err, &appErr) {
+			common.AppError(c, appErr)
 			return
 		}
 		common.Error(c, http.StatusInternalServerError, "注册失败")
@@ -50,14 +51,15 @@ func (h *UserHandler) Register(c *gin.Context) {
 func (h *UserHandler) Login(c *gin.Context) {
 	var req model.LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		common.Error(c, http.StatusBadRequest, "参数校验失败: "+err.Error())
+		common.AppError(c, types.NewInvalidParamf(err.Error()))
 		return
 	}
 
 	resp, err := h.svc.Login(req)
 	if err != nil {
-		if errors.Is(err, types.ErrUnauthorized) {
-			common.Error(c, http.StatusUnauthorized, "用户名或密码错误")
+		var appErr *types.AppError
+		if errors.As(err, &appErr) {
+			common.AppError(c, appErr)
 			return
 		}
 		common.Error(c, http.StatusInternalServerError, "登录失败")
@@ -77,7 +79,7 @@ func (h *UserHandler) Me(c *gin.Context) {
 		return
 	}
 	if user == nil {
-		common.Error(c, http.StatusNotFound, "用户不存在")
+		common.AppError(c, types.ErrNotFound)
 		return
 	}
 
@@ -108,20 +110,21 @@ func (h *UserHandler) UploadAvatar(c *gin.Context) {
 
 	file, header, err := c.Request.FormFile("file")
 	if err != nil {
-		common.Error(c, http.StatusBadRequest, "请选择头像文件")
+		common.AppError(c, types.ErrGetFileFailed)
 		return
 	}
 	defer file.Close()
 
 	if header.Size > maxAvatarSize {
-		common.Error(c, http.StatusBadRequest, "头像文件不能超过 2MB")
+		common.AppError(c, types.ErrAvatarTooLarge)
 		return
 	}
 
 	avatarURL, err := h.svc.UploadAvatar(c.Request.Context(), userID, file, header.Filename, header.Size)
 	if err != nil {
-		if errors.Is(err, types.ErrInvalidParam) {
-			common.Error(c, http.StatusBadRequest, "仅支持 jpg/png/gif/webp 格式")
+		var appErr *types.AppError
+		if errors.As(err, &appErr) {
+			common.AppError(c, appErr)
 			return
 		}
 		common.Error(c, http.StatusInternalServerError, "上传头像失败")

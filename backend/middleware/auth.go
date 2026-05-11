@@ -1,11 +1,13 @@
 package middleware
 
 import (
-	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
+
+	"wetalk/common"
+	"wetalk/type"
 )
 
 // AuthMiddleware JWT 认证中间件
@@ -13,20 +15,14 @@ func AuthMiddleware(jwtSecret string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"code":    401,
-				"message": "缺少认证令牌",
-			})
+			common.AppError(c, types.ErrMissingToken)
 			c.Abort()
 			return
 		}
 
 		parts := strings.SplitN(authHeader, " ", 2)
 		if len(parts) != 2 || parts[0] != "Bearer" {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"code":    401,
-				"message": "认证格式错误",
-			})
+			common.AppError(c, types.ErrInvalidTokenFormat)
 			c.Abort()
 			return
 		}
@@ -40,20 +36,14 @@ func AuthMiddleware(jwtSecret string) gin.HandlerFunc {
 		})
 
 		if err != nil || !token.Valid {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"code":    401,
-				"message": "无效的认证令牌",
-			})
+			common.AppError(c, types.ErrInvalidToken)
 			c.Abort()
 			return
 		}
 
 		claims, ok := token.Claims.(jwt.MapClaims)
 		if !ok {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"code":    401,
-				"message": "无效的令牌声明",
-			})
+			common.AppError(c, types.ErrInvalidClaims)
 			c.Abort()
 			return
 		}

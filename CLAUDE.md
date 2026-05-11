@@ -69,25 +69,25 @@ wetalk/
 │   ├── cmd/main.go              # 入口：依赖注入 + 启动/关闭
 │   ├── config/config.go         # YAML 配置加载 (DB/Redis/JWT)
 │   ├── db/                      # MySQL (sql.DB) + Redis (go-redis/v9) 连接池
-│   ├── internal/
-│   │   ├── router/router.go     # 路由注册（按模块分组，从 main.go 拆出）
-│   │   ├── user/                # handler → service → repository 三层
-│   │   ├── friend/              # 好友模块 (添加/接受/拒绝/待处理)
-│   │   ├── message/             # 消息模块 (发送/查询/上传/文件元数据)
-│   │   ├── ws/                  # WebSocket (Hub + Client + auth frame 认证)
-│   │   └── middleware/auth.go   # JWT Bearer token 解析 → 注入 user_id
-│   ├── pkg/
-│   │   ├── errors/errors.go     # ErrNotFound/ErrConflict/ErrUnauthorized
-│   │   └── utils/utils.go       # 统一响应 Success()/Error()
+│   ├── controller/              # HTTP Handler 层 (user/friend/message/upload)
+│   ├── service/                 # 业务逻辑层 (user/friend/message/chat)
+│   ├── dto/                     # 数据访问层 (SQL 查询)
+│   ├── model/                   # 数据模型 & 请求/响应结构体
+│   ├── common/                  # 共享工具 (Response 辅助函数, OSS Client)
+│   ├── type/                    # 类型定义 (AppError 业务错误码, Response 结构体)
+│   ├── middleware/auth.go       # JWT Bearer token 解析 → 注入 user_id
+│   ├── ws/                      # WebSocket (Hub + Client + auth frame 认证)
 │   └── scripts/migrations/      # SQL 迁移 (users/friends/messages/file_metadata 表)
 ```
 
-## Code Formatting (必须在完成功能代码后执行)
+## Code Formatting
 
-完成任何功能代码编写后，必须运行对应项目的格式化命令，确保代码风格一致：
+代码格式化通过 Claude Code hooks 自动触发（`.claude/settings.local.json` + `.claude/format-on-edit.sh`）：
 
-- **后端**：`gofumpt -w .` 和 `goimports -w .`（工具在 `$HOME/go/bin/`）
-- **前端**：`pnpm lint --fix`（ESLint 自动修复）
+- **前端文件** (`frontend/**/*.{ts,tsx,js,jsx,css}`) — 编辑后自动运行 `pnpm lint --fix`
+- **后端文件** (`backend/**/*.go`) — 编辑后自动运行 `gofumpt -w` + `goimports -w`
+
+无需手动运行格式化命令。
 
 ### Next.js 16
 - 先读 `node_modules/next/dist/docs/` 指南，API 与训练数据可能不同。
@@ -134,12 +134,13 @@ wetalk/
 
 ### Go 后端规范
 - 单行 if 必须加大括号。
-- Handler → Service → Repository 三层分离，repository 负责 SQL。
-- 路由注册集中在 `internal/router/router.go`，main.go 只做依赖组装和启动/关闭。
+- Controller → Service → DTO 三层分离，dto 负责 SQL。
+- 路由注册集中在 `router/router.go`，main.go 只做依赖组装和启动/关闭。
 - 密码字段 `json:"-"`，密码哈希 bcrypt。
 - 用户注册自动生成 DiceBear avatar URL。
 - SQL 迁移按编号命名，`config.yaml` 不入库。
 - WebSocket 认证采用 auth frame 方案（首条消息 `{"type":"auth","token":"<JWT>"}`），不走 JWT middleware。
+- 业务错误使用 `types.AppError`（含 Code/Message/HTTPStatus），controller 通过 `errors.As` + `common.AppError` 统一响应。
 
 ### 前端状态管理 (zustand)
 - `auth store`：token(userId+hydrated+_userFetched)→ init()→ localStorage→ fetchUser→ RouteGuard 等_userFetched

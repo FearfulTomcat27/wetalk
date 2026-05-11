@@ -10,6 +10,7 @@ import (
 
 	"wetalk/common"
 	"wetalk/model"
+	"wetalk/type"
 )
 
 // UploadHandler 上传处理器
@@ -28,13 +29,13 @@ func (h *UploadHandler) Upload(c *gin.Context) {
 
 	fileType := c.PostForm("type")
 	if fileType != model.ContentTypeImage && fileType != model.ContentTypeFile {
-		common.Error(c, http.StatusBadRequest, "type 参数必须是 image 或 file")
+		common.AppError(c, types.ErrInvalidUploadType)
 		return
 	}
 
 	file, header, err := c.Request.FormFile("file")
 	if err != nil {
-		common.Error(c, http.StatusBadRequest, "获取文件失败")
+		common.AppError(c, types.ErrGetFileFailed)
 		return
 	}
 	defer file.Close()
@@ -43,16 +44,16 @@ func (h *UploadHandler) Upload(c *gin.Context) {
 
 	if fileType == model.ContentTypeImage {
 		if !strings.HasPrefix(mimeType, "image/") {
-			common.Error(c, http.StatusBadRequest, "只允许上传图片文件")
+			common.AppError(c, types.ErrNotImage)
 			return
 		}
 		if header.Size > 10*1024*1024 {
-			common.Error(c, http.StatusBadRequest, "图片大小不能超过 10MB")
+			common.AppError(c, types.ErrImageTooLarge)
 			return
 		}
 	} else {
 		if header.Size > 20*1024*1024 {
-			common.Error(c, http.StatusBadRequest, "文件大小不能超过 20MB")
+			common.AppError(c, types.ErrFileTooLarge)
 			return
 		}
 	}
