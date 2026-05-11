@@ -9,21 +9,23 @@ WeTalk — C/S 模式的在线聊天应用。前端 Next.js 16 (React 19) + Go/g
 ## Commands
 
 ### Frontend (`frontend/`)
+
 ```bash
 pnpm dev          # 开发服务器 (Turbopack, :3000)
 pnpm build        # 生产构建 (TypeScript + Turbopack)
 pnpm lint         # ESLint
 pnpm add <pkg>    # 安装依赖（必须用 pnpm）
 ```
+
 shadcn/ui 组件用 `npx shadcn@latest add <component>` 添加。
 
 ### Backend (`backend/`)
+
 ```bash
 go build ./...    # 编译检查
 go run ./cmd      # 启动服务 (:8080)
 go mod tidy       # 整理依赖
 ```
-格式化：`gofumpt` / `goimports`，lint：`golangci-lint`。工具在 `$HOME/go/bin/`。
 
 **注意：** 配置在 `config.yaml`（不入库，含 DB 密码 + JWT secret），参考 README 示例。
 
@@ -82,7 +84,7 @@ wetalk/
 
 ## Code Formatting
 
-代码格式化通过 Claude Code hooks 自动触发（`.claude/settings.local.json` + `.claude/format-on-edit.sh`）：
+代码格式化通过 Claude Code hooks 自动触发（`.claude/settings.json` + `.claude/format-on-edit.sh`）：
 
 - **前端文件** (`frontend/**/*.{ts,tsx,js,jsx,css}`) — 编辑后自动运行 `pnpm lint --fix`
 - **后端文件** (`backend/**/*.go`) — 编辑后自动运行 `gofumpt -w` + `goimports -w`
@@ -90,49 +92,56 @@ wetalk/
 无需手动运行格式化命令。
 
 ### Next.js 16
+
 - 先读 `node_modules/next/dist/docs/` 指南，API 与训练数据可能不同。
 - Turbopack 构建，App Router，Server Components 默认开启。
 - Tailwind CSS v4 + `@tailwindcss/postcss` 插件。
 
 ### 路由权限 (RouteGuard)
+
 封装在 `components/RouteGuard.tsx`，根 layout 使用。所有跳转逻辑只在此一处：
 
-| 路由类型 | 路径 | 规则 |
-|---------|------|------|
-| `publicRoutes` | `/login`, `/register` | 已登录 → `/chat` |
-| `redirectWhenLoggedInRoutes` | `/` | 已登录 → `/chat` |
-| `protectedRoutes` | `/chat`, `/contacts` | 未登录 → `/login` |
+| 路由类型                         | 路径                    | 规则             |
+|------------------------------|-----------------------|----------------|
+| `publicRoutes`               | `/login`, `/register` | 已登录 → `/chat`  |
+| `redirectWhenLoggedInRoutes` | `/`                   | 已登录 → `/chat`  |
+| `protectedRoutes`            | `/chat`, `/contacts`  | 未登录 → `/login` |
 
 各页面组件只管 UI 渲染，不做跳转判断。
 
 ### 头像逻辑
+
 - 优先使用后端返回的 `avatar` URL。
 - `getAvatarSrc(avatarUrl?, seed?)` — 无 URL 时 DiceBear (`micah?seed=`) fallback。
 - 所有 `<img>` 有 `onError` fallback 到首字母占位。
 
 ### 时间戳显示 (ChatArea.formatTime)
+
 消息时间戳按以下优先级格式化：
 
-| 条件 | 格式 | 示例 |
-|------|------|------|
-| 昨天 | `昨天 HH:mm` | 昨天 14:30 |
-| 当前周（周一~周日） | `星期X HH:mm` | 星期一 14:30 |
-| 同年非当前周 | `M月D日 HH:mm` | 5月10日 14:30 |
-| 跨年 | `YYYY年M月D日 HH:mm` | 2025年12月28日 14:30 |
+| 条件         | 格式                | 示例                |
+|------------|-------------------|-------------------|
+| 昨天         | `昨天 HH:mm`        | 昨天 14:30          |
+| 当前周（周一~周日） | `星期X HH:mm`       | 星期一 14:30         |
+| 同年非当前周     | `M月D日 HH:mm`      | 5月10日 14:30       |
+| 跨年         | `YYYY年M月D日 HH:mm` | 2025年12月28日 14:30 |
 
 ### 文件上传 (OSS)
+
 - 前端 `ChatInput` 支持图片/文件上传按钮，图片 ≤10MB，文件 ≤20MB。
 - 后端 `/api/upload` 接收 multipart 请求，上传至阿里云 OSS，key 格式 `uploads/{type}/{user_id}/{timestamp}_{filename}`。
 - 上传成功后返回 `{url, content_type, file_name, file_size, file_type}`。
 - `file_metadata` 表存储文件元数据（URL/原始名称/大小/MIME/宽高），通过 `message_id` 一对一关联消息。
 
 ### API 对接
+
 - 前端 axios 实例 `baseURL: http://localhost:8080`（`NEXT_PUBLIC_API_URL` 可覆盖）。
 - 请求拦截器自动注入 `Bearer token`。
 - 响应拦截器统一 `toast.error(error.message)`，页面不重复 catch 弹 toast。
 - 后端响应格式：`{ code, message, data }`。
 
 ### Go 后端规范
+
 - 单行 if 必须加大括号。
 - Controller → Service → DTO 三层分离，dto 负责 SQL。
 - 路由注册集中在 `router/router.go`，main.go 只做依赖组装和启动/关闭。
@@ -143,34 +152,38 @@ wetalk/
 - 业务错误使用 `types.AppError`（含 Code/Message/HTTPStatus），controller 通过 `errors.As` + `common.AppError` 统一响应。
 
 ### 前端状态管理 (zustand)
+
 - `auth store`：token(userId+hydrated+_userFetched)→ init()→ localStorage→ fetchUser→ RouteGuard 等_userFetched
-- `chat store`：contacts/messages/activeContactId/connected/sending/inputTexts，sendMessage WS-first + HTTP 降级，乐观 UI (临时消息 + updateMessageStatus)
+- `chat store`：contacts/messages/activeContactId/connected/sending/inputTexts，sendMessage WS-first + HTTP 降级，乐观 UI (
+  临时消息 + updateMessageStatus)
 - `sonner` toast 统一由 axios 拦截器处理
 
 ### WebSocket 实时聊天
+
 - 后端 `ws` 包：Hub 模式（连接注册表 + 消息路由），Client（auth frame 认证 + ReadPump/WritePump）
 - 前端 `ws.ts`：WSClient 单例，auth frame 认证，25s 心跳 ping，指数退避重连
-- 消息协议：扁平 JSON 格式，文本消息 `{"type":"message.new","id":42,"sender_id":1,...}`，图片/文件消息额外携带 `content_type` 和 `file_metadata`
+- 消息协议：扁平 JSON 格式，文本消息 `{"type":"message.new","id":42,"sender_id":1,...}`，图片/文件消息额外携带
+  `content_type` 和 `file_metadata`
 - 路由注册集中在 `internal/router/router.go`，按模块分组（auth/api/friends/messages/ws/upload）
 - WS-first 发送：connected 时走 WS，离线时 HTTP POST 降级
 - 乐观 UI：发送时生成临时消息（负 id + client_msg_id），收到 message.sent 后替换为服务端真实消息
 
 ### API 端点
 
-| 方法 | 路径 | 认证 | 说明 |
-|------|------|------|------|
-| POST | `/api/auth/register` | 无 | 注册 (自动生成 DiceBear 头像) |
-| POST | `/api/auth/login` | 无 | 登录 |
-| GET | `/api/me` | JWT | 当前用户完整信息 |
-| GET | `/api/users?keyword=` | JWT | 搜索用户 |
-| POST | `/api/friends` | JWT | 发送好友请求 `{friend_id}` |
-| GET | `/api/friends` | JWT | 好友列表 |
-| GET | `/api/friends/pending` | JWT | 待处理好友请求 |
-| PUT | `/api/friends/:id/accept` | JWT | 接受请求 |
-| DELETE | `/api/friends/:id` | JWT | 删除/拒绝好友 |
-| POST | `/api/messages` | JWT | 发送消息 `{receiver_id, content}` |
-| GET | `/api/messages?friend_id=` | JWT | 聊天记录 (双向查询) |
-| PUT | `/api/messages/read` | JWT | 标记已读 `{sender_id}` |
-| POST | `/api/upload` | JWT | 上传文件/图片 (multipart, `type=image\|file`, 图片≤10MB, 文件≤20MB) |
-| GET | `/ws` | auth frame | WebSocket 连接 (实时消息推送) |
-| GET | `/ping` | 无 | 健康检查 |
+| 方法     | 路径                         | 认证         | 说明                                                        |
+|--------|----------------------------|------------|-----------------------------------------------------------|
+| POST   | `/api/auth/register`       | 无          | 注册 (自动生成 DiceBear 头像)                                     |
+| POST   | `/api/auth/login`          | 无          | 登录                                                        |
+| GET    | `/api/me`                  | JWT        | 当前用户完整信息                                                  |
+| GET    | `/api/users?keyword=`      | JWT        | 搜索用户                                                      |
+| POST   | `/api/friends`             | JWT        | 发送好友请求 `{friend_id}`                                      |
+| GET    | `/api/friends`             | JWT        | 好友列表                                                      |
+| GET    | `/api/friends/pending`     | JWT        | 待处理好友请求                                                   |
+| PUT    | `/api/friends/:id/accept`  | JWT        | 接受请求                                                      |
+| DELETE | `/api/friends/:id`         | JWT        | 删除/拒绝好友                                                   |
+| POST   | `/api/messages`            | JWT        | 发送消息 `{receiver_id, content}`                             |
+| GET    | `/api/messages?friend_id=` | JWT        | 聊天记录 (双向查询)                                               |
+| PUT    | `/api/messages/read`       | JWT        | 标记已读 `{sender_id}`                                        |
+| POST   | `/api/upload`              | JWT        | 上传文件/图片 (multipart, `type=image\|file`, 图片≤10MB, 文件≤20MB) |
+| GET    | `/ws`                      | auth frame | WebSocket 连接 (实时消息推送)                                     |
+| GET    | `/ping`                    | 无          | 健康检查                                                      |
