@@ -7,6 +7,10 @@ import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/Avatar";
 import { useAuthStore } from "@/stores/auth";
 import { Download, X } from "lucide-react";
+import { MessageContextMenu } from "@/components/MessageContextMenu";
+import { useChatStore } from "@/stores/chat";
+import { deleteMessage } from "@/lib/api/messages";
+import { toast } from "sonner";
 
 /** 根据文件扩展名返回对应的图标颜色和显示文字 */
 function getFileTypeInfo(mimeType?: string, fileName?: string): { color: string; label: string } {
@@ -162,7 +166,16 @@ export function ChatArea({ messages, currentUserId, contactName, contactUsername
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [filePreview, setFilePreview] = useState<Message | null>(null);
 
+  // 右键菜单状态
+  const [contextMenu, setContextMenu] = useState<{
+    message: Message;
+    x: number;
+    y: number;
+  } | null>(null);
+
   const user = useAuthStore((s) => s.user);
+  const activeContactId = useChatStore((s) => s.activeContactId);
+  const setQuotedMessage = useChatStore((s) => s.setQuotedMessage);
 
   const selfUsername = user?.username ?? "me";
   const otherUsername = contactUsername ?? contactName ?? "?";
@@ -258,6 +271,10 @@ export function ChatArea({ messages, currentUserId, contactName, contactUsername
                   "flex animate-message-in items-start gap-2.5 mb-4",
                   isSelf ? "flex-row-reverse" : "flex-row",
                 )}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  setContextMenu({ message: msg, x: e.clientX, y: e.clientY });
+                }}
               >
                 {/* 头像 */}
                 <Avatar
@@ -270,19 +287,32 @@ export function ChatArea({ messages, currentUserId, contactName, contactUsername
                 {/* 气泡 / 图片缩略图 */}
                 <div className="relative max-w-[62%]">
                   {msg.content_type === "image" ? (
-                    <div
-                      className="relative overflow-hidden rounded-md cursor-pointer shadow-md"
-                      style={{ maxWidth: 200 }}
-                      onClick={() => setPreviewImage(msg.content)}
-                    >
-                      <Image
-                        src={msg.content}
-                        alt="图片消息"
-                        width={200}
-                        height={150}
-                        className="object-cover"
-                        unoptimized={msg.content.includes("oss-cn-shanghai")}
-                      />
+                    <div>
+                      {/* 被引用消息预览 */}
+                      {msg.quoted_content && (
+                        <div className={cn(
+                          "mb-1 rounded border-l-2 pl-2 text-xs leading-snug max-w-[200px]",
+                          isSelf ? "border-white/40 text-white/75" : "border-gray-400 text-gray-500",
+                        )}>
+                          {msg.quoted_content.length > 50
+                            ? msg.quoted_content.slice(0, 50) + "..."
+                            : msg.quoted_content}
+                        </div>
+                      )}
+                      <div
+                        className="relative overflow-hidden rounded-md cursor-pointer shadow-md"
+                        style={{ maxWidth: 200 }}
+                        onClick={() => setPreviewImage(msg.content)}
+                      >
+                        <Image
+                          src={msg.content}
+                          alt="图片消息"
+                          width={200}
+                          height={150}
+                          className="object-cover"
+                          unoptimized={msg.content.includes("oss-cn-shanghai")}
+                        />
+                      </div>
                     </div>
                   ) : (
                     <>
@@ -295,6 +325,18 @@ export function ChatArea({ messages, currentUserId, contactName, contactUsername
                           msg.content_type === "file" && "p-2.5",
                         )}
                       >
+                        {/* 被引用消息预览 */}
+                        {msg.quoted_content && (
+                          <div className={cn(
+                            "mb-1.5 rounded border-l-2 pl-2 text-xs leading-snug",
+                            isSelf ? "border-white/40 text-white/75" : "border-gray-400 text-gray-500",
+                          )}>
+                            {msg.quoted_content.length > 50
+                              ? msg.quoted_content.slice(0, 50) + "..."
+                              : msg.quoted_content}
+                          </div>
+                        )}
+
                         {msg.content_type === "file" ? (
                           <div
                             onClick={() => setFilePreview(msg)}
@@ -360,6 +402,27 @@ export function ChatArea({ messages, currentUserId, contactName, contactUsername
         <div ref={bottomRef} />
       </div>
     </div>
+
+    {/* 右键菜单 */}
+    {contextMenu && (
+      <MessageContextMenu
+        x={contextMenu.x}
+        y={contextMenu.y}
+        message={contextMenu.message}
+        isSelf={contextMenu.message.sender_id === currentUserId}
+        onClose={() => setContextMenu(null)}
+        onDelete={(msg) => {
+          deleteMessage(msg.id)
+            .then(() => toast.success("消息已删除"))
+            .catch(() => {});
+        }}
+        onQuote={(msg) => {
+          if (activeContactId !== null) {
+            setQuotedMessage(activeContactId, { id: msg.id, content: msg.content });
+          }
+        }}
+      />
+    )}
 
     {/* 图片预览 */}
     {previewImage && (

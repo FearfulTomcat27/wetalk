@@ -65,6 +65,8 @@ export default function ChatPage() {
   const inputTexts = useChatStore((s) => s.inputTexts);
   const sending = useChatStore((s) => s.sending);
   const connected = useChatStore((s) => s.connected);
+  const quotedMessages = useChatStore((s) => s.quotedMessages);
+  const clearQuotedMessage = useChatStore((s) => s.clearQuotedMessage);
   const setContacts = useChatStore((s) => s.setContacts);
   const setActiveContactId = useChatStore((s) => s.setActiveContactId);
   const selectContact = useChatStore((s) => s.selectContact);
@@ -293,6 +295,16 @@ export default function ChatPage() {
               }}
               onSend={sendMessage}
               onSendMedia={sendMediaMessage}
+              quotedMessage={
+                activeContactId !== null
+                  ? quotedMessages[String(activeContactId)] ?? null
+                  : null
+              }
+              onClearQuote={() => {
+                if (activeContactId !== null) {
+                  clearQuotedMessage(activeContactId);
+                }
+              }}
             />
           </>
         ) : (

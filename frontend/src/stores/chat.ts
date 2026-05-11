@@ -33,6 +33,8 @@ interface ChatState {
   connected: boolean;
   /** contactId → 是否正在发送 */
   sending: Record<number, boolean>;
+  /** contactId → 该联系人下的引用消息 */
+  quotedMessages: Record<string, { id: number; content: string } | null>;
 
   setContacts: (contacts: Contact[]) => void;
   selectContact: (id: number) => void;
@@ -40,6 +42,8 @@ interface ChatState {
   setInputText: (contactId: number, text: string) => void;
   sendMessage: () => void;
   sendMediaMessage: (content: string, contentType: string, fileMetadata?: FileMetadata) => void;
+  setQuotedMessage: (contactId: number, msg: { id: number; content: string }) => void;
+  clearQuotedMessage: (contactId: number) => void;
   addContact: (contact: Contact) => void;
   loadMessages: (chatId: number, msgs: Message[]) => void;
   receiveMessage: (msg: Message) => void;
@@ -54,6 +58,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   inputTexts: {},
   connected: false,
   sending: {},
+  quotedMessages: {},
 
   setContacts: (contacts: Contact[]) => {
     set({ contacts });
@@ -79,7 +84,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   sendMessage: () => {
-    const { activeContactId, inputTexts, connected, contacts } = get();
+    const { activeContactId, inputTexts, connected, contacts, quotedMessages } = get();
     if (activeContactId === null) {
       return;
     }
@@ -94,6 +99,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return;
     }
 
+    const quoted = quotedMessages[String(activeContactId)];
+    const quotedMessageId = quoted?.id;
+    const quotedContent = quoted?.content;
+
     const currentUserId = useAuthStore.getState().user?.id ?? 0;
     const clientMsgId = `c_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const tempMsg: Message = {
@@ -103,9 +112,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
       content: text,
       created_at: new Date().toISOString(),
       client_msg_id: clientMsgId,
+      quoted_message_id: quotedMessageId,
+      quoted_content: quotedContent,
     };
 
-    // 乐观 UI：先插入临时消息，清空输入框
+    // 乐观 UI：先插入临时消息，清空输入框，清除引用
     set((state) => ({
       messages: {
         ...state.messages,
@@ -118,6 +129,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         c.id === activeContactId ? { ...c, lastMessage: text, lastMessageTime: new Date().toISOString() } : c
       ),
       inputTexts: { ...state.inputTexts, [activeContactId]: "" },
+      quotedMessages: { ...state.quotedMessages, [String(activeContactId)]: null },
     }));
 
     if (connected) {
@@ -125,13 +137,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
         chat_id: chatId,
         content: text,
         client_msg_id: clientMsgId,
+        quoted_message_id: quotedMessageId,
       });
     } else {
       // HTTP 降级
       set((state) => ({
         sending: { ...state.sending, [activeContactId]: true },
       }));
-      sendMessageAPI({ chat_id: chatId, content: text })
+      sendMessageAPI({ chat_id: chatId, content: text, quoted_message_id: quotedMessageId })
         .then((res) => {
           const serverMsg = res.data!;
           get().updateMessageStatus(clientMsgId, serverMsg);
@@ -148,7 +161,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   sendMediaMessage: (content: string, contentType: string, fileMetadata?: FileMetadata) => {
-    const { activeContactId, connected, contacts } = get();
+    const { activeContactId, connected, contacts, quotedMessages } = get();
     if (activeContactId === null) {
       return;
     }
@@ -158,6 +171,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (!chatId) {
       return;
     }
+
+    const quoted = quotedMessages[String(activeContactId)];
+    const quotedMessageId = quoted?.id;
+    const quotedContent = quoted?.content;
 
     const currentUserId = useAuthStore.getState().user?.id ?? 0;
     const clientMsgId = `c_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -172,6 +189,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       created_at: new Date().toISOString(),
       client_msg_id: clientMsgId,
       file_metadata: fileMetadata,
+      quoted_message_id: quotedMessageId,
+      quoted_content: quotedContent,
     };
 
     set((state) => ({
@@ -185,6 +204,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       contacts: contacts.map((c) =>
         c.id === activeContactId ? { ...c, lastMessage: lastMsgLabel, lastMessageTime: new Date().toISOString() } : c
       ),
+      quotedMessages: { ...state.quotedMessages, [String(activeContactId)]: null },
     }));
 
     const fmPayload = fileMetadata ? {
@@ -200,13 +220,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
         content,
         content_type: contentType,
         client_msg_id: clientMsgId,
+        quoted_message_id: quotedMessageId,
         file_metadata: fmPayload,
       });
     } else {
       set((state) => ({
         sending: { ...state.sending, [activeContactId]: true },
       }));
-      sendMessageAPI({ chat_id: chatId, content, content_type: contentType, client_msg_id: clientMsgId, file_metadata: fmPayload })
+      sendMessageAPI({ chat_id: chatId, content, content_type: contentType, client_msg_id: clientMsgId, quoted_message_id: quotedMessageId, file_metadata: fmPayload })
         .then((res) => {
           const serverMsg = res.data!;
           get().updateMessageStatus(clientMsgId, serverMsg);
@@ -218,6 +239,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
           }));
         });
     }
+  },
+
+  setQuotedMessage: (contactId: number, msg: { id: number; content: string }) => {
+    set((state) => ({
+      quotedMessages: { ...state.quotedMessages, [String(contactId)]: msg },
+    }));
+  },
+
+  clearQuotedMessage: (contactId: number) => {
+    set((state) => ({
+      quotedMessages: { ...state.quotedMessages, [String(contactId)]: null },
+    }));
   },
 
   addContact: (contact: Contact) => {

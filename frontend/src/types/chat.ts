@@ -23,6 +23,10 @@ export interface Message {
   client_msg_id?: string;
   /** 文件消息元数据 */
   file_metadata?: FileMetadata;
+  /** 引用回复的消息 ID */
+  quoted_message_id?: number;
+  /** 被引用消息的内容（用于预览展示） */
+  quoted_content?: string;
 }
 
 export interface FileMetadata {

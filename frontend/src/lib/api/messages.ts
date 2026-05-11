@@ -6,6 +6,7 @@ export interface SendMessageRequest {
   content: string;
   content_type?: string;
   client_msg_id?: string;
+  quoted_message_id?: number;
   file_metadata?: {
     url: string;
     original_name: string;
@@ -44,5 +45,13 @@ export function getMessages(
     method: "GET",
     url: "/api/messages",
     params: { chat_id: chatId, before, limit },
+  });
+}
+
+/** 删除消息 */
+export function deleteMessage(messageId: number) {
+  return request({
+    method: "DELETE",
+    url: `/api/messages/${messageId}`,
   });
 }

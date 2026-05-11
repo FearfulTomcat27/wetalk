@@ -9,15 +9,13 @@ import (
 	"syscall"
 	"time"
 
+	"wetalk/common"
 	"wetalk/config"
+	"wetalk/controller"
 	"wetalk/db"
-	"wetalk/internal/chat"
-	"wetalk/internal/friend"
-	"wetalk/internal/message"
-	"wetalk/internal/router"
-	"wetalk/internal/user"
-	"wetalk/internal/ws"
-	"wetalk/pkg/oss"
+	"wetalk/router"
+	"wetalk/service"
+	"wetalk/ws"
 )
 
 func main() {
@@ -44,67 +42,25 @@ func main() {
 	go hub.Run()
 
 	// 初始化 OSS 客户端
-	ossClient := oss.NewClient(cfg.OSS)
+	ossClient := common.NewClient(cfg.OSS)
 
 	// 创建服务
-	chatSvc := chat.NewService()
-	msgSvc := message.NewService(chatSvc)
-	userSvc := user.NewService(cfg.JWT.Secret, cfg.JWT.ExpireHours, ossClient)
-	friendSvc := friend.NewService(chatSvc)
+	chatSvc := service.NewChatService()
+	msgSvc := service.NewMessageService(chatSvc)
+	userSvc := service.NewUserService(cfg.JWT.Secret, cfg.JWT.ExpireHours, ossClient)
+	friendSvc := service.NewFriendService(chatSvc)
 
 	// 注入 getMemberIDs 回调到 Hub（打破 ws → chat 循环依赖）
 	hub.SetGetMemberIDs(chatSvc.GetMemberIDs)
 
-	// WS 发送消息回调（桥接 ws 包与 message 包，避免循环依赖）
-	sendMsgFunc := func(senderID int64, chatID int64, content string, contentType string, clientMsgID string, fileMetadata *ws.WSFileMetadata) (*ws.SentMessage, error) {
-		var filePayload *message.FileMetadataPayload
-		if fileMetadata != nil {
-			filePayload = &message.FileMetadataPayload{
-				URL:          fileMetadata.URL,
-				OriginalName: fileMetadata.OriginalName,
-				FileSize:     fileMetadata.FileSize,
-				MimeType:     fileMetadata.MimeType,
-				Width:        fileMetadata.Width,
-				Height:       fileMetadata.Height,
-			}
-		}
-		msgResp, err := msgSvc.SendMessage(senderID, message.SendMessageRequest{
-			ChatID:       chatID,
-			Content:      content,
-			ContentType:  contentType,
-			FileMetadata: filePayload,
-		})
-		if err != nil {
-			return nil, err
-		}
-		var meta *ws.WSFileMetadata
-		if msgResp.FileMetadata != nil {
-			meta = &ws.WSFileMetadata{
-				URL:          msgResp.FileMetadata.URL,
-				OriginalName: msgResp.FileMetadata.OriginalName,
-				FileSize:     msgResp.FileMetadata.FileSize,
-				MimeType:     msgResp.FileMetadata.MimeType,
-				Width:        msgResp.FileMetadata.Width,
-				Height:       msgResp.FileMetadata.Height,
-			}
-		}
-		return &ws.SentMessage{
-			ID:           msgResp.ID,
-			ChatID:       msgResp.ChatID,
-			SenderID:     msgResp.SenderID,
-			Content:      msgResp.Content,
-			ContentType:  msgResp.ContentType,
-			FileMetadata: meta,
-			Status:       msgResp.Status,
-			CreatedAt:    msgResp.CreatedAt,
-		}, nil
-	}
+	// WS 发送消息回调（桥接 ws 包与 message 包的类型转换）
+	sendMsgFunc := service.NewSendMessageFunc(msgSvc)
 
 	// 创建 Handler
-	userHandler := user.NewHandler(userSvc)
-	friendHandler := friend.NewHandler(friendSvc)
-	msgHandler := message.NewHandler(msgSvc, chatSvc, hub)
-	uploadHandler := message.NewUploadHandler(ossClient)
+	userHandler := controller.NewUserHandler(userSvc)
+	friendHandler := controller.NewFriendHandler(friendSvc)
+	msgHandler := controller.NewMessageHandler(msgSvc, chatSvc, hub)
+	uploadHandler := controller.NewUploadHandler(ossClient)
 
 	// 注册路由
 	r := router.Setup(&router.Dependencies{
@@ -117,10 +73,14 @@ func main() {
 		UploadHandler: uploadHandler,
 	})
 
-	// 启动 HTTP 服务
+	runServer(r, hub)
+}
+
+// runServer 启动 HTTP 服务并等待优雅关闭
+func runServer(handler http.Handler, hub *ws.Hub) {
 	srv := &http.Server{
 		Addr:    ":8080",
-		Handler: r,
+		Handler: handler,
 	}
 
 	go func() {
@@ -130,13 +90,13 @@ func main() {
 		}
 	}()
 
-	// 优雅关闭
+	// 等待关闭信号
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 	log.Println("正在关闭服务...")
 
-	// 逆序关闭：HTTP → Hub → DB/Redis
+	// 逆序关闭：HTTP → Hub → DB/Redis（defer 在 main 中处理）
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(ctx); err != nil {
@@ -144,6 +104,5 @@ func main() {
 	}
 
 	hub.Shutdown()
-
 	log.Println("服务已关闭")
 }

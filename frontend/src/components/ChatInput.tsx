@@ -9,7 +9,7 @@ import {
   useEffect,
   type KeyboardEvent,
 } from "react";
-import { Smile, Paperclip, ImageIcon, Loader2 } from "lucide-react";
+import { Smile, Paperclip, ImageIcon, Loader2, X } from "lucide-react";
 import { uploadFile } from "@/lib/api/upload";
 
 /** 常用 emoji 列表 */
@@ -35,10 +35,14 @@ interface ChatInputProps {
   value?: string;
   /** 受控 onChange */
   onChange?: (text: string) => void;
+  /** 当前引用的消息（显示预览条） */
+  quotedMessage?: { id: number; content: string } | null;
+  /** 取消引用 */
+  onClearQuote?: () => void;
 }
 
 const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(
-  function ChatInput({ onSend, onSendMedia, disabled = false, value, onChange }, ref) {
+  function ChatInput({ onSend, onSendMedia, disabled = false, value, onChange, quotedMessage, onClearQuote }, ref) {
     const [localText, setLocalText] = useState("");
     const [emojiOpen, setEmojiOpen] = useState(false);
     const [uploading, setUploading] = useState(false);
@@ -173,6 +177,25 @@ const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(
         />
 
         <div className="mx-auto relative">
+          {/* 引用预览条 */}
+          {quotedMessage && (
+            <div className="mb-1 flex items-center gap-2 rounded-lg bg-muted/50 px-3 py-2 text-sm">
+              <span className="text-muted-foreground shrink-0">📝</span>
+              <span className="min-w-0 flex-1 truncate text-muted-foreground">
+                {quotedMessage.content.length > 50
+                  ? quotedMessage.content.slice(0, 50) + "..."
+                  : quotedMessage.content}
+              </span>
+              <button
+                type="button"
+                onClick={onClearQuote}
+                className="flex size-6 shrink-0 items-center justify-center rounded-full text-muted-foreground/60 transition-colors hover:bg-muted-foreground/10 hover:text-muted-foreground"
+              >
+                <X className="size-3.5" />
+              </button>
+            </div>
+          )}
+
           {/* Emoji 面板 */}
           {emojiOpen && (
             <div
