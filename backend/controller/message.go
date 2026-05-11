@@ -8,9 +8,11 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"wetalk/common"
+	"wetalk/dto"
 	"wetalk/model"
 	"wetalk/service"
-	"wetalk/type"
+
+	"wetalk/types"
 	"wetalk/ws"
 )
 
@@ -22,8 +24,18 @@ type MessageHandler struct {
 }
 
 // NewMessageHandler 创建消息处理器
-func NewMessageHandler(svc *service.MessageService, chatSvc *service.ChatService, hub *ws.Hub) *MessageHandler {
-	return &MessageHandler{svc: svc, chatSvc: chatSvc, hub: hub}
+func NewMessageHandler(hub *ws.Hub) *MessageHandler {
+	chatSvc := service.NewChatService()
+	return &MessageHandler{
+		svc:     service.NewMessageService(chatSvc),
+		chatSvc: chatSvc,
+		hub:     hub,
+	}
+}
+
+// Service 暴露内部 MessageService 供 router 构造 WS 发送回调
+func (h *MessageHandler) Service() *service.MessageService {
+	return h.svc
 }
 
 // Send 发送消息
@@ -104,10 +116,24 @@ func (h *MessageHandler) Read(c *gin.Context) {
 	common.Success(c, http.StatusOK, "已标记已读", nil)
 }
 
-// List 获取聊天记录
-func (h *MessageHandler) List(c *gin.Context) {
+// Unread 获取当前用户所有聊天的未读消息数
+func (h *MessageHandler) Unread(c *gin.Context) {
 	userID := c.GetInt64("user_id")
 
+	counts, err := h.svc.GetUnreadCounts(userID)
+	if err != nil {
+		common.Error(c, http.StatusInternalServerError, "获取未读消息数失败")
+		return
+	}
+	if counts == nil {
+		counts = []dto.UnreadCount{}
+	}
+
+	common.Success(c, http.StatusOK, "成功", counts)
+}
+
+// List 获取聊天记录
+func (h *MessageHandler) List(c *gin.Context) {
 	chatIDStr := c.Query("chat_id")
 	chatID, err := strconv.ParseInt(chatIDStr, 10, 64)
 	if err != nil || chatID == 0 {
@@ -129,7 +155,4 @@ func (h *MessageHandler) List(c *gin.Context) {
 	}
 
 	common.Success(c, http.StatusOK, "成功", messages)
-
-	// userID is unused in this handler but kept for potential auth verification
-	_ = userID
 }

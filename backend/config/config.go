@@ -8,10 +8,18 @@ import (
 
 // Config 应用配置
 type Config struct {
+	Logger   LoggerConfig   `yaml:"logger"`
 	Database DatabaseConfig `yaml:"database"`
 	JWT      JWTConfig      `yaml:"jwt"`
 	Redis    RedisConfig    `yaml:"redis"`
 	OSS      OSSConfig      `yaml:"oss"`
+}
+
+// LoggerConfig 日志配置
+type LoggerConfig struct {
+	Level     string `yaml:"level"`      // debug | info | warn | error
+	JSON      bool   `yaml:"json"`       // true=JSON 格式, false=文本格式
+	AddSource bool   `yaml:"add_source"` // 是否添加源码位置
 }
 
 // DatabaseConfig 数据库配置

@@ -5,29 +5,38 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"wetalk/common"
 	"wetalk/config"
 	"wetalk/controller"
 	"wetalk/middleware"
+	"wetalk/service"
 	"wetalk/ws"
 )
 
 // Dependencies 路由注册所需的所有依赖
 type Dependencies struct {
-	Config        *config.Config
-	Hub           *ws.Hub
-	SendMsgFunc   ws.SendMessageFunc
-	UserHandler   *controller.UserHandler
-	FriendHandler *controller.FriendHandler
-	MsgHandler    *controller.MessageHandler
-	UploadHandler *controller.UploadHandler
+	Config    *config.Config
+	Hub       *ws.Hub
+	OSSClient *common.Client
 }
 
-// Setup 创建 Gin Engine 并注册所有路由
+// Setup 创建 Gin Engine、构造 Handler 并注册所有路由
 func Setup(deps *Dependencies) *gin.Engine {
 	r := gin.Default()
 
 	// 全局中间件
 	r.Use(middleware.CORSMiddleware())
+
+	// 构造 Handler
+	userHandler := controller.NewUserHandler(deps.Config.JWT.Secret, deps.Config.JWT.ExpireHours, deps.OSSClient)
+	friendHandler := controller.NewFriendHandler(deps.Hub)
+	msgHandler := controller.NewMessageHandler(deps.Hub)
+	uploadHandler := controller.NewUploadHandler(deps.OSSClient)
+
+	// WS 基础设施所需的共享依赖
+	chatSvc := service.NewChatService()
+	deps.Hub.SetGetMemberIDs(chatSvc.GetMemberIDs)
+	sendMsgFunc := service.NewSendMessageFunc(msgHandler.Service())
 
 	// 健康检查
 	r.GET("/ping", func(c *gin.Context) {
@@ -35,13 +44,13 @@ func Setup(deps *Dependencies) *gin.Engine {
 	})
 
 	// WebSocket（认证通过 auth frame，不走 JWT middleware）
-	r.GET("/ws", ws.WSHandler(deps.Hub, deps.Config.JWT.Secret, deps.SendMsgFunc))
+	r.GET("/ws", ws.WSHandler(deps.Hub, deps.Config.JWT.Secret, sendMsgFunc))
 
 	// 认证路由（无需 JWT）
-	registerAuthRoutes(r, deps.UserHandler)
+	registerAuthRoutes(r, userHandler)
 
 	// 需要认证的路由
-	registerAPIRoutes(r, deps.Config.JWT.Secret, deps.UserHandler, deps.FriendHandler, deps.MsgHandler, deps.UploadHandler)
+	registerAPIRoutes(r, deps.Config.JWT.Secret, userHandler, friendHandler, msgHandler, uploadHandler)
 
 	return r
 }

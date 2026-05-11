@@ -48,6 +48,20 @@ export function getMessages(
   });
 }
 
+/** 未读消息数（每个聊天一个） */
+export interface UnreadCount {
+  chat_id: number;
+  count: number;
+}
+
+/** 获取当前用户所有聊天的未读消息数 */
+export function getUnreadCounts() {
+  return request<UnreadCount[]>({
+    method: "GET",
+    url: "/api/messages/unread",
+  });
+}
+
 /** 删除消息 */
 export function deleteMessage(messageId: number) {
   return request({

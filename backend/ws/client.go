@@ -2,11 +2,12 @@ package ws
 
 import (
 	"encoding/json"
-	"log"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/gorilla/websocket"
+
+	"wetalk/common/logger"
 )
 
 const (
@@ -72,8 +73,8 @@ func (c *Client) ReadPump() {
 	for {
 		_, raw, err := c.conn.ReadMessage()
 		if err != nil {
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseNormalClosure) {
-				log.Printf("read error: %v", err)
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseNormalClosure, websocket.CloseAbnormalClosure) {
+				logger.Module("ws").Warn("read error", "err", err)
 			}
 			break
 		}
@@ -142,7 +143,7 @@ func (c *Client) WritePump() {
 			}
 			data, err := json.Marshal(msg)
 			if err != nil {
-				log.Printf("marshal error: %v", err)
+				logger.Module("ws").Error("marshal error", "err", err)
 				continue
 			}
 			if err := c.conn.WriteMessage(websocket.TextMessage, data); err != nil {

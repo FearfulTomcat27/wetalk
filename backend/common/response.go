@@ -3,7 +3,7 @@ package common
 import (
 	"github.com/gin-gonic/gin"
 
-	"wetalk/type"
+	"wetalk/types"
 )
 
 // Success 成功响应

@@ -11,6 +11,7 @@ func registerMessageRoutes(api *gin.RouterGroup, h *controller.MessageHandler) {
 	{
 		messages.POST("", h.Send)
 		messages.GET("", h.List)
+		messages.GET("/unread", h.Unread)
 		messages.PUT("/read", h.Read)
 	}
 }

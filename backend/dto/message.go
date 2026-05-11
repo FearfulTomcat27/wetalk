@@ -89,3 +89,27 @@ func (r *messageRepo) CountUnread(chatID, currentUserID int64) (int64, error) {
 	}
 	return count, nil
 }
+
+// UnreadCount 单个聊天的未读数
+type UnreadCount struct {
+	ChatID int64 `json:"chat_id"`
+	Count  int64 `json:"count"`
+}
+
+// GetUnreadCounts 查询当前用户在所有聊天中的未读消息数（轻量级，供侧边栏角标使用）
+func (r *messageRepo) GetUnreadCounts(userID int64) ([]UnreadCount, error) {
+	var counts []UnreadCount
+	err := db.DB.Raw(`
+		SELECT m.chat_id, COUNT(*) AS count
+		FROM messages m
+		JOIN friendships f ON f.chat_id = m.chat_id
+		WHERE (f.user1_id = ? OR f.user2_id = ?)
+		  AND m.sender_id != ?
+		  AND m.status != ?
+		GROUP BY m.chat_id
+	`, userID, userID, userID, model.MessageStatusRead).Scan(&counts).Error
+	if err != nil {
+		return nil, err
+	}
+	return counts, nil
+}

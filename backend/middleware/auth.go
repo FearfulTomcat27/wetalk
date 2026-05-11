@@ -7,7 +7,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 
 	"wetalk/common"
-	"wetalk/type"
+	"wetalk/types"
 )
 
 // AuthMiddleware JWT 认证中间件

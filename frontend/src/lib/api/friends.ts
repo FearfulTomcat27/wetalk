@@ -30,8 +30,9 @@ export function addFriend(friendId: number) {
 }
 
 /** 获取好友列表 */
-export function getFriends() {
-  return request<FriendInfo[]>({ method: "GET", url: "/api/friends" });
+export function getFriends(chatted?: boolean) {
+  const params = chatted ? { chatted: "1" } : undefined;
+  return request<FriendInfo[]>({ method: "GET", url: "/api/friends", params });
 }
 
 /** 获取待处理的好友请求 */

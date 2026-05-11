@@ -42,3 +42,35 @@ func (Friendship) TableName() string {
 type AddFriendRequest struct {
 	FriendID int64 `json:"friend_id" binding:"required"`
 }
+
+// ========== 好友列表/待处理请求 响应类型 ==========
+
+// SenderInfo 发送者信息
+type SenderInfo struct {
+	ID       int64  `json:"id"`
+	Username string `json:"username"`
+	Nickname string `json:"nickname"`
+	Avatar   string `json:"avatar"`
+}
+
+// PendingRequest 待处理好友请求（含发送者信息）
+type PendingRequest struct {
+	ID        int64      `json:"id"`
+	Status    string     `json:"status"`
+	User      SenderInfo `json:"user"`
+	CreatedAt string     `json:"created_at"`
+}
+
+// FriendshipInfo 好友信息（从 friendships 表查询，JOIN users + LEFT JOIN chats 获取信息）
+type FriendshipInfo struct {
+	ID              int64  `json:"id"`
+	ChatID          int64  `json:"chat_id"`
+	FriendID        int64  `json:"friend_id"`
+	FriendName      string `json:"friend_name"`
+	FriendAvatar    string `json:"friend_avatar"`
+	LastMessage     string `json:"last_message"`
+	LastMessageType string `json:"last_message_type"`
+	LastMessageTime string `json:"last_message_time"`
+	UnreadCount     int    `json:"unread_count"`
+	CreatedAt       string `json:"created_at"`
+}

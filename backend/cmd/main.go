@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -10,11 +10,10 @@ import (
 	"time"
 
 	"wetalk/common"
+	"wetalk/common/logger"
 	"wetalk/config"
-	"wetalk/controller"
 	"wetalk/db"
 	"wetalk/router"
-	"wetalk/service"
 	"wetalk/ws"
 )
 
@@ -22,18 +21,28 @@ func main() {
 	// 加载配置
 	cfg, err := config.Load("config.yaml")
 	if err != nil {
-		log.Fatalf("加载配置失败: %v", err)
+		slog.Error("加载配置失败", "err", err)
+		os.Exit(1)
 	}
+
+	// 初始化日志
+	logger.Init(logger.Config{
+		Level:     cfg.Logger.Level,
+		JSON:      cfg.Logger.JSON,
+		AddSource: cfg.Logger.AddSource,
+	})
 
 	// 初始化数据库
 	if err := db.Init(cfg.Database); err != nil {
-		log.Fatalf("初始化数据库失败: %v", err)
+		slog.Error("初始化数据库失败", "err", err)
+		os.Exit(1)
 	}
 	defer db.Close()
 
 	// 初始化 Redis
 	if err := db.InitRedis(cfg.Redis); err != nil {
-		log.Fatalf("初始化 Redis 失败: %v", err)
+		slog.Error("初始化 Redis 失败", "err", err)
+		os.Exit(1)
 	}
 	defer db.CloseRedis()
 
@@ -44,33 +53,11 @@ func main() {
 	// 初始化 OSS 客户端
 	ossClient := common.NewClient(cfg.OSS)
 
-	// 创建服务
-	chatSvc := service.NewChatService()
-	msgSvc := service.NewMessageService(chatSvc)
-	userSvc := service.NewUserService(cfg.JWT.Secret, cfg.JWT.ExpireHours, ossClient)
-	friendSvc := service.NewFriendService(chatSvc)
-
-	// 注入 getMemberIDs 回调到 Hub（打破 ws → chat 循环依赖）
-	hub.SetGetMemberIDs(chatSvc.GetMemberIDs)
-
-	// WS 发送消息回调（桥接 ws 包与 message 包的类型转换）
-	sendMsgFunc := service.NewSendMessageFunc(msgSvc)
-
-	// 创建 Handler
-	userHandler := controller.NewUserHandler(userSvc)
-	friendHandler := controller.NewFriendHandler(friendSvc)
-	msgHandler := controller.NewMessageHandler(msgSvc, chatSvc, hub)
-	uploadHandler := controller.NewUploadHandler(ossClient)
-
-	// 注册路由
+	// 注册路由（内部构造 service 和 Handler）
 	r := router.Setup(&router.Dependencies{
-		Config:        cfg,
-		Hub:           hub,
-		SendMsgFunc:   sendMsgFunc,
-		UserHandler:   userHandler,
-		FriendHandler: friendHandler,
-		MsgHandler:    msgHandler,
-		UploadHandler: uploadHandler,
+		Config:    cfg,
+		Hub:       hub,
+		OSSClient: ossClient,
 	})
 
 	runServer(r, hub)
@@ -78,15 +65,18 @@ func main() {
 
 // runServer 启动 HTTP 服务并等待优雅关闭
 func runServer(handler http.Handler, hub *ws.Hub) {
+	l := logger.Module("main")
+
 	srv := &http.Server{
 		Addr:    ":8080",
 		Handler: handler,
 	}
 
 	go func() {
-		log.Println("服务启动在 :8080")
+		l.Info("服务启动", "addr", ":8080")
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("服务启动失败: %v", err)
+			l.Error("服务启动失败", "err", err)
+			os.Exit(1)
 		}
 	}()
 
@@ -94,15 +84,15 @@ func runServer(handler http.Handler, hub *ws.Hub) {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
-	log.Println("正在关闭服务...")
+	l.Info("正在关闭服务...")
 
 	// 逆序关闭：HTTP → Hub → DB/Redis（defer 在 main 中处理）
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(ctx); err != nil {
-		log.Printf("服务强制关闭: %v", err)
+		l.Error("服务强制关闭", "err", err)
 	}
 
 	hub.Shutdown()
-	log.Println("服务已关闭")
+	l.Info("服务已关闭")
 }

@@ -1,8 +1,9 @@
 package ws
 
 import (
-	"log"
 	"sync"
+
+	"wetalk/common/logger"
 )
 
 // GetMemberIDsFunc 获取聊天成员ID列表的回调类型（避免 ws → chat 循环依赖）
@@ -73,13 +74,15 @@ func (h *Hub) SendTo(userID int64, msg interface{}) {
 	// recover 防止向已关闭 channel 发送导致 panic
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("send to disconnected client %d: %v", userID, r)
+			logger.Module("hub").Warn("send to disconnected client",
+				"user_id", userID, "recover", r)
 		}
 	}()
 	select {
 	case client.send <- msg:
 	default:
-		log.Printf("client %d send channel full, dropping message", userID)
+		logger.Module("hub").Warn("client send channel full, dropping message",
+			"user_id", userID)
 	}
 }
 
@@ -90,7 +93,8 @@ func (h *Hub) SendToChat(chatID, senderID int64, msg interface{}) {
 	}
 	memberIDs, err := h.getMemberIDs(chatID)
 	if err != nil {
-		log.Printf("get member ids for chat %d: %v", chatID, err)
+		logger.Module("hub").Error("get member ids for chat",
+			"chat_id", chatID, "err", err)
 		return
 	}
 	for _, memberID := range memberIDs {

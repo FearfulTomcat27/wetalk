@@ -1,11 +1,12 @@
 package ws
 
 import (
-	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
+
+	"wetalk/common/logger"
 )
 
 var upgrader = websocket.Upgrader{
@@ -21,7 +22,7 @@ func WSHandler(hub *Hub, jwtSecret string, sendMsg SendMessageFunc) gin.HandlerF
 	return func(c *gin.Context) {
 		conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 		if err != nil {
-			log.Printf("upgrade error: %v", err)
+			logger.Module("ws").Error("upgrade error", "err", err)
 			return
 		}
 

@@ -1,26 +1,27 @@
 package controller
 
 import (
-	"fmt"
+	"errors"
 	"net/http"
-	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 
 	"wetalk/common"
 	"wetalk/model"
-	"wetalk/type"
+	"wetalk/service"
+	"wetalk/types"
 )
 
 // UploadHandler 上传处理器
 type UploadHandler struct {
-	ossClient *common.Client
+	svc *service.UploadService
 }
 
 // NewUploadHandler 创建上传处理器
 func NewUploadHandler(ossClient *common.Client) *UploadHandler {
-	return &UploadHandler{ossClient: ossClient}
+	return &UploadHandler{
+		svc: service.NewUploadService(ossClient),
+	}
 }
 
 // Upload 上传文件/图片到 OSS
@@ -42,35 +43,16 @@ func (h *UploadHandler) Upload(c *gin.Context) {
 
 	mimeType := header.Header.Get("Content-Type")
 
-	if fileType == model.ContentTypeImage {
-		if !strings.HasPrefix(mimeType, "image/") {
-			common.AppError(c, types.ErrNotImage)
-			return
-		}
-		if header.Size > 10*1024*1024 {
-			common.AppError(c, types.ErrImageTooLarge)
-			return
-		}
-	} else {
-		if header.Size > 20*1024*1024 {
-			common.AppError(c, types.ErrFileTooLarge)
-			return
-		}
-	}
-
-	key := fmt.Sprintf("uploads/%s/%d/%d_%s", fileType, userID, time.Now().UnixMilli(), header.Filename)
-
-	url, err := h.ossClient.PutObject(c.Request.Context(), key, file, mimeType, header.Size)
+	resp, err := h.svc.Upload(c.Request.Context(), userID, fileType, file, header.Filename, header.Size, mimeType)
 	if err != nil {
+		var appErr *types.AppError
+		if errors.As(err, &appErr) {
+			common.AppError(c, appErr)
+			return
+		}
 		common.Error(c, http.StatusInternalServerError, "上传失败")
 		return
 	}
 
-	common.Success(c, http.StatusOK, "上传成功", gin.H{
-		"url":          url,
-		"content_type": fileType,
-		"file_name":    header.Filename,
-		"file_size":    header.Size,
-		"file_type":    mimeType,
-	})
+	common.Success(c, http.StatusOK, "上传成功", resp)
 }

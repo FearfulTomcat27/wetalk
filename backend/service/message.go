@@ -1,9 +1,13 @@
 package service
 
 import (
+	"fmt"
+	"time"
+
+	"wetalk/common"
 	"wetalk/dto"
 	"wetalk/model"
-	"wetalk/type"
+	"wetalk/types"
 	"wetalk/ws"
 )
 
@@ -103,7 +107,36 @@ func (s *MessageService) SendMessage(senderID int64, req model.SendMessageReques
 
 // MarkAsRead 标记消息已读
 func (s *MessageService) MarkAsRead(userID, chatID int64) error {
-	return dto.Message.MarkAsRead(chatID, userID)
+	err := dto.Message.MarkAsRead(chatID, userID)
+	if err != nil {
+		return err
+	}
+	// 未读计数已变更，使缓存失效
+	go func() { _ = common.CacheDel(fmt.Sprintf("unread:%d", userID)) }()
+	return nil
+}
+
+// GetUnreadCounts 获取当前用户所有聊天的未读消息数
+func (s *MessageService) GetUnreadCounts(userID int64) ([]dto.UnreadCount, error) {
+	key := fmt.Sprintf("unread:%d", userID)
+	var counts []dto.UnreadCount
+	if ok, _ := common.CacheGet(key, &counts); ok {
+		return counts, nil
+	}
+
+	var err error
+	counts, err = dto.Message.GetUnreadCounts(userID)
+	if err != nil {
+		return nil, err
+	}
+	if counts == nil {
+		counts = []dto.UnreadCount{}
+	}
+
+	if cacheErr := common.CacheSet(key, counts, 20*time.Second); cacheErr != nil {
+		_ = cacheErr
+	}
+	return counts, nil
 }
 
 // GetConversation 获取聊天记录

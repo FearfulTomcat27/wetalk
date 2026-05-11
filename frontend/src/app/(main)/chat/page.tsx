@@ -8,7 +8,7 @@ import { ChatInput } from "@/components/ChatInput";
 import { useChatStore } from "@/stores/chat";
 import { useAuthStore } from "@/stores/auth";
 import { wsClient } from "@/lib/ws";
-import { getFriends, getMessages, markAsRead } from "@/lib/api";
+import { getFriends, getMessages, markAsRead, getPendingRequests, getUnreadCounts } from "@/lib/api";
 import type { FriendInfo } from "@/lib/api";
 import type { Contact } from "@/types/chat";
 import { Loader2 } from "lucide-react";
@@ -77,6 +77,9 @@ export default function ChatPage() {
   const receiveMessage = useChatStore((s) => s.receiveMessage);
   const updateMessageStatus = useChatStore((s) => s.updateMessageStatus);
   const setConnected = useChatStore((s) => s.setConnected);
+  const setPendingRequestsCount = useChatStore((s) => s.setPendingRequestsCount);
+  const incrementPendingRequests = useChatStore((s) => s.incrementPendingRequests);
+  const setUnreadCounts = useChatStore((s) => s.setUnreadCounts);
 
   // 仅保留 UI 相关的局部 state
   const [contactsLoading, setContactsLoading] = useState(true);
@@ -86,13 +89,21 @@ export default function ChatPage() {
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // 加载好友列表 → 写入 store
+  // 加载好友列表 & pending 请求数 & 未读消息数 → 写入 store
   useEffect(() => {
     async function load() {
       setContactsLoading(true);
       try {
-        const res = await getFriends();
-        setContacts((res.data || []).map(friendToContact));
+        const [friendsRes, pendingRes, unreadRes] = await Promise.all([
+          getFriends(),
+          getPendingRequests(),
+          getUnreadCounts(),
+        ]);
+        setContacts((friendsRes.data || []).map(friendToContact));
+        setPendingRequestsCount((pendingRes.data || []).length);
+        const unreadMap: Record<number, number> = {};
+        (unreadRes.data || []).forEach((u) => { unreadMap[u.chat_id] = u.count; });
+        setUnreadCounts(unreadMap);
       } catch {
         // 错误已在拦截器 toast
       } finally {
@@ -100,16 +111,18 @@ export default function ChatPage() {
       }
     }
     load();
-  }, [setContacts]);
+  }, [setContacts, setPendingRequestsCount, setUnreadCounts]);
 
-  // 通过 URL query param ?contact=xxx 自动选中联系人
+  // 通过 URL query param ?contact=xxx 自动选中联系人（仅首次生效，选中后清除 URL）
   useEffect(() => {
     const contactParam = searchParams.get("contact");
-    if (contactParam && contacts.length > 0) {
-      const contactId = Number(contactParam);
-      if (!Number.isNaN(contactId) && contacts.some((c) => c.id === contactId)) {
-        setActiveContactId(contactId);
-      }
+    if (!contactParam || contacts.length === 0) {
+      return;
+    }
+    const contactId = Number(contactParam);
+    if (!Number.isNaN(contactId) && contacts.some((c) => c.id === contactId)) {
+      setActiveContactId(contactId);
+      window.history.replaceState(null, "", "/chat");
     }
   }, [searchParams, contacts, setActiveContactId]);
 
@@ -167,12 +180,16 @@ export default function ChatPage() {
     const unsubDisconnect = wsClient.on("disconnect", () => {
       setConnected(false);
     });
+    const unsubFriendReq = wsClient.on("friend.request.new", () => {
+      incrementPendingRequests();
+    });
 
     return () => {
       unsubNew();
       unsubSent();
       unsubAuthOk();
       unsubDisconnect();
+      unsubFriendReq();
       wsClient.disconnect();
     };
   }, [userFetched, token, receiveMessage, updateMessageStatus, setConnected]);

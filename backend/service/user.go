@@ -15,7 +15,7 @@ import (
 	"wetalk/common"
 	"wetalk/dto"
 	"wetalk/model"
-	"wetalk/type"
+	"wetalk/types"
 )
 
 // UserService 用户业务逻辑
@@ -110,7 +110,21 @@ func (s *UserService) Login(req model.LoginRequest) (*model.AuthResponse, error)
 
 // GetUserByID 根据 ID 获取用户信息
 func (s *UserService) GetUserByID(id int64) (*model.User, error) {
-	return dto.User.FindByID(id)
+	key := fmt.Sprintf("user:%d", id)
+	var user model.User
+	if ok, _ := common.CacheGet(key, &user); ok {
+		return &user, nil
+	}
+
+	userPtr, err := dto.User.FindByID(id)
+	if err != nil || userPtr == nil {
+		return userPtr, err
+	}
+
+	if cacheErr := common.CacheSet(key, *userPtr, 10*time.Minute); cacheErr != nil {
+		_ = cacheErr
+	}
+	return userPtr, nil
 }
 
 // SearchUsers 搜索用户
@@ -170,6 +184,9 @@ func (s *UserService) UploadAvatar(ctx context.Context, userID int64, file io.Re
 	if err := dto.User.UpdateAvatar(userID, avatarURL); err != nil {
 		return "", err
 	}
+
+	// 用户信息已变更，使缓存失效
+	go func() { _ = common.CacheDel(fmt.Sprintf("user:%d", userID)) }()
 
 	return avatarURL, nil
 }

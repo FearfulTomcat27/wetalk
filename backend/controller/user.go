@@ -9,7 +9,7 @@ import (
 	"wetalk/common"
 	"wetalk/model"
 	"wetalk/service"
-	"wetalk/type"
+	"wetalk/types"
 )
 
 // maxAvatarSize 头像文件最大 2MB
@@ -21,8 +21,10 @@ type UserHandler struct {
 }
 
 // NewUserHandler 创建用户 HTTP 处理器
-func NewUserHandler(svc *service.UserService) *UserHandler {
-	return &UserHandler{svc: svc}
+func NewUserHandler(jwtSecret string, expireHours int, ossClient *common.Client) *UserHandler {
+	return &UserHandler{
+		svc: service.NewUserService(jwtSecret, expireHours, ossClient),
+	}
 }
 
 // Register 注册

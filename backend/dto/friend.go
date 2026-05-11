@@ -102,24 +102,6 @@ func (r *friendRepo) Delete(id int64) error {
 	return db.DB.Delete(&model.FriendRequest{}, id).Error
 }
 
-// ========== PendingRequest (待处理请求) ==========
-
-// SenderInfo 发送者信息
-type SenderInfo struct {
-	ID       int64  `json:"id"`
-	Username string `json:"username"`
-	Nickname string `json:"nickname"`
-	Avatar   string `json:"avatar"`
-}
-
-// PendingRequest 待处理好友请求（含发送者信息）
-type PendingRequest struct {
-	ID        int64      `json:"id"`
-	Status    string     `json:"status"`
-	User      SenderInfo `json:"user"`
-	CreatedAt string     `json:"created_at"`
-}
-
 // pendingRequestRow 扁平查询结果（GORM 扫描用）
 type pendingRequestRow struct {
 	ID        int64  `gorm:"column:id"`
@@ -132,7 +114,7 @@ type pendingRequestRow struct {
 }
 
 // FindPendingByUserID 获取发给当前用户的待处理好友请求（JOIN users 查发送者信息）
-func (r *friendRepo) FindPendingByUserID(userID int64) ([]PendingRequest, error) {
+func (r *friendRepo) FindPendingByUserID(userID int64) ([]model.PendingRequest, error) {
 	var rows []pendingRequestRow
 	err := db.DB.Table("friend_requests").
 		Select("friend_requests.id, friend_requests.status, users.id AS user_id, users.username, users.nickname, users.avatar, friend_requests.created_at").
@@ -145,12 +127,12 @@ func (r *friendRepo) FindPendingByUserID(userID int64) ([]PendingRequest, error)
 	}
 
 	// 组装为嵌套结构
-	requests := make([]PendingRequest, 0, len(rows))
+	requests := make([]model.PendingRequest, 0, len(rows))
 	for _, row := range rows {
-		requests = append(requests, PendingRequest{
+		requests = append(requests, model.PendingRequest{
 			ID:     row.ID,
 			Status: row.Status,
-			User: SenderInfo{
+			User: model.SenderInfo{
 				ID:       row.UserID,
 				Username: row.Username,
 				Nickname: row.Nickname,
@@ -164,26 +146,13 @@ func (r *friendRepo) FindPendingByUserID(userID int64) ([]PendingRequest, error)
 
 // ========== friendships 表（已建立的好友关系） ==========
 
-// FriendshipInfo 好友信息（从 friendships 表查询，JOIN users + LEFT JOIN chats 获取信息）
-type FriendshipInfo struct {
-	ID              int64  `json:"id"`
-	ChatID          int64  `json:"chat_id"`
-	FriendID        int64  `json:"friend_id"`
-	FriendName      string `json:"friend_name"`
-	FriendAvatar    string `json:"friend_avatar"`
-	LastMessage     string `json:"last_message"`
-	LastMessageType string `json:"last_message_type"`
-	LastMessageTime string `json:"last_message_time"`
-	UnreadCount     int    `json:"unread_count"`
-	CreatedAt       string `json:"created_at"`
-}
-
-// CreateFriendship 创建好友关系（小 ID 在前，防重）
-func (r *friendRepo) CreateFriendship(user1ID, user2ID int64) (*model.Friendship, error) {
+// CreateFriendship 创建好友关系（小 ID 在前，带 chat_id，防重）
+func (r *friendRepo) CreateFriendship(user1ID, user2ID, chatID int64) (*model.Friendship, error) {
 	smaller, larger := sortIDs(user1ID, user2ID)
 	friendship := &model.Friendship{
 		User1ID: smaller,
 		User2ID: larger,
+		ChatID:  chatID,
 	}
 	// FirstOrCreate: 若已存在则直接返回，防止重复插入
 	if err := db.DB.Where("user1_id = ? AND user2_id = ?", smaller, larger).
@@ -193,43 +162,65 @@ func (r *friendRepo) CreateFriendship(user1ID, user2ID int64) (*model.Friendship
 	return friendship, nil
 }
 
-// FindFriendships 查询用户的所有好友（JOIN users + LEFT JOIN chats，使用 chat 模型简化查询）
-func (r *friendRepo) FindFriendships(userID int64) ([]FriendshipInfo, error) {
-	var friendships []FriendshipInfo
-	err := db.DB.Table("friendships").
-		Select(`friendships.id,
-		        friendships.chat_id,
-		        CASE WHEN friendships.user1_id = ? THEN friendships.user2_id ELSE friendships.user1_id END AS friend_id,
-		        users.nickname AS friend_name,
-		        users.avatar AS friend_avatar,
-		        COALESCE(chats.last_message_text, '') AS last_message,
-		        COALESCE(last_msg.content_type, 'text') AS last_message_type,
-		        COALESCE(chats.last_message_time, '') AS last_message_time,
-		        COALESCE(unread.cnt, 0) AS unread_count,
-		        friendships.created_at`, userID).
-		Joins("JOIN users ON users.id = CASE WHEN friendships.user1_id = ? THEN friendships.user2_id ELSE friendships.user1_id END", userID).
-		Joins("LEFT JOIN chats ON chats.id = friendships.chat_id").
-		Joins("LEFT JOIN messages last_msg ON last_msg.id = chats.last_message_id").
-		Joins(`LEFT JOIN (
-			SELECT chat_id, COUNT(*) AS cnt
-			FROM messages
-			WHERE sender_id != ? AND status != 'read'
-			GROUP BY chat_id
-		) unread ON unread.chat_id = friendships.chat_id`, userID).
-		Where("friendships.user1_id = ? OR friendships.user2_id = ?", userID, userID).
-		Order("COALESCE(chats.last_message_time, friendships.created_at) DESC").
-		Scan(&friendships).Error
-	if err != nil {
+// FindFriendships 查询用户的所有好友（CTE + UNION ALL 替代 OR 以利用索引）
+// chatOnly 为 true 时只返回有消息记录的好友（供聊天页使用）
+func (r *friendRepo) FindFriendships(userID int64, chatOnly ...bool) ([]model.FriendshipInfo, error) {
+	var friendships []model.FriendshipInfo
+
+	filterChat := len(chatOnly) > 0 && chatOnly[0]
+	chatFilter := ""
+	if filterChat {
+		chatFilter = " AND c.last_message_id IS NOT NULL"
+	}
+
+	query := `
+		WITH unread AS (
+			SELECT m.chat_id, COUNT(*) AS cnt
+			FROM messages m
+			WHERE m.sender_id != ? AND m.status != 'read'
+			  AND m.chat_id IN (SELECT chat_id FROM friendships WHERE user1_id = ? OR user2_id = ?)
+			GROUP BY m.chat_id
+		)
+		SELECT f.id, f.chat_id,
+		       f.user2_id AS friend_id,
+		       u.nickname AS friend_name,
+		       u.avatar AS friend_avatar,
+		       COALESCE(c.last_message_text, '') AS last_message,
+		       COALESCE(m.content_type, 'text') AS last_message_type,
+		       COALESCE(c.last_message_time, '') AS last_message_time,
+		       COALESCE(un.cnt, 0) AS unread_count,
+		       f.created_at
+		FROM friendships f
+		JOIN users u ON u.id = f.user2_id
+		LEFT JOIN chats c ON c.id = f.chat_id
+		LEFT JOIN messages m ON m.id = c.last_message_id
+		LEFT JOIN unread un ON un.chat_id = f.chat_id
+		WHERE f.user1_id = ?` + chatFilter + `
+
+		UNION ALL
+
+		SELECT f.id, f.chat_id,
+		       f.user1_id AS friend_id,
+		       u.nickname AS friend_name,
+		       u.avatar AS friend_avatar,
+		       COALESCE(c.last_message_text, '') AS last_message,
+		       COALESCE(m.content_type, 'text') AS last_message_type,
+		       COALESCE(c.last_message_time, '') AS last_message_time,
+		       COALESCE(un.cnt, 0) AS unread_count,
+		       f.created_at
+		FROM friendships f
+		JOIN users u ON u.id = f.user1_id
+		LEFT JOIN chats c ON c.id = f.chat_id
+		LEFT JOIN messages m ON m.id = c.last_message_id
+		LEFT JOIN unread un ON un.chat_id = f.chat_id
+		WHERE f.user2_id = ?` + chatFilter + `
+
+		ORDER BY COALESCE(last_message_time, created_at) DESC`
+
+	if err := db.DB.Raw(query, userID, userID, userID, userID, userID).Scan(&friendships).Error; err != nil {
 		return nil, err
 	}
 	return friendships, nil
-}
-
-// UpdateFriendshipChatID 关联 chat 到 friendships
-func (r *friendRepo) UpdateFriendshipChatID(friendshipID, chatID int64) error {
-	return db.DB.Model(&model.Friendship{}).
-		Where("id = ?", friendshipID).
-		Update("chat_id", chatID).Error
 }
 
 // DeleteFriendship 删除好友关系

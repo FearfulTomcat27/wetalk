@@ -4,15 +4,16 @@ import "time"
 
 const (
 	// WS 消息类型
-	TypeAuth        = "auth"
-	TypeAuthOK      = "auth.ok"
-	TypeAuthError   = "auth.error"
-	TypeMessageSend = "message.send"
-	TypeMessageSent = "message.sent"
-	TypeMessageNew  = "message.new"
-	TypePong        = "pong"
-	TypePing        = "ping"
-	TypeError       = "error"
+	TypeAuth             = "auth"
+	TypeAuthOK           = "auth.ok"
+	TypeAuthError        = "auth.error"
+	TypeMessageSend      = "message.send"
+	TypeMessageSent      = "message.sent"
+	TypeMessageNew       = "message.new"
+	TypePong             = "pong"
+	TypePing             = "ping"
+	TypeError            = "error"
+	TypeFriendRequestNew = "friend.request.new"
 )
 
 // --- C2S 请求结构体（扁平格式）---
@@ -45,6 +46,17 @@ type MessageSendRequest struct {
 }
 
 // --- S2C 事件结构体（扁平格式）---
+
+// FriendRequestNewEvent 好友请求新事件
+type FriendRequestNewEvent struct {
+	Type      string `json:"type"`
+	ID        int64  `json:"id"`
+	UserID    int64  `json:"user_id"`
+	Username  string `json:"username"`
+	Nickname  string `json:"nickname"`
+	Avatar    string `json:"avatar"`
+	CreatedAt string `json:"created_at"`
+}
 
 // AuthOKEvent 认证成功
 type AuthOKEvent struct {

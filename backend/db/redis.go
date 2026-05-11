@@ -3,11 +3,11 @@ package db
 import (
 	"context"
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/redis/go-redis/v9"
 
+	"wetalk/common/logger"
 	"wetalk/config"
 )
 
@@ -30,7 +30,7 @@ func InitRedis(cfg config.RedisConfig) error {
 		return fmt.Errorf("Redis 连接失败: %w", err)
 	}
 
-	log.Println("Redis 连接成功")
+	logger.Module("redis").Info("Redis 连接成功")
 	return nil
 }
 
@@ -43,7 +43,7 @@ func GetRedis() *redis.Client {
 func CloseRedis() {
 	if RedisClient != nil {
 		if err := RedisClient.Close(); err != nil {
-			log.Printf("关闭 Redis 连接失败: %v", err)
+			logger.Module("redis").Error("关闭 Redis 连接失败", "err", err)
 		}
 	}
 }

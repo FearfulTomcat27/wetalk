@@ -35,6 +35,10 @@ interface ChatState {
   sending: Record<number, boolean>;
   /** contactId → 该联系人下的引用消息 */
   quotedMessages: Record<string, { id: number; content: string } | null>;
+  /** 待处理的好友请求数量 */
+  pendingRequestsCount: number;
+  /** chatId → 未读消息数（来自单独接口，供侧边栏角标使用） */
+  unreadCounts: Record<number, number>;
 
   setContacts: (contacts: Contact[]) => void;
   selectContact: (id: number) => void;
@@ -49,6 +53,10 @@ interface ChatState {
   receiveMessage: (msg: Message) => void;
   updateMessageStatus: (clientMsgId: string, serverMsg: Message) => void;
   setConnected: (connected: boolean) => void;
+  setPendingRequestsCount: (count: number) => void;
+  incrementPendingRequests: () => void;
+  decrementPendingRequests: () => void;
+  setUnreadCounts: (counts: Record<number, number>) => void;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -59,18 +67,27 @@ export const useChatStore = create<ChatState>((set, get) => ({
   connected: false,
   sending: {},
   quotedMessages: {},
+  pendingRequestsCount: 0,
+  unreadCounts: {},
 
   setContacts: (contacts: Contact[]) => {
     set({ contacts });
   },
 
   selectContact: (id: number) => {
-    set({ activeContactId: id });
-    set((state) => ({
-      contacts: state.contacts.map((c) =>
-        c.id === id ? { ...c, unread: 0 } : c
-      ),
-    }));
+    set((state) => {
+      const contact = state.contacts.find((c) => c.id === id);
+      const chatId = contact?.chat_id;
+      return {
+        activeContactId: id,
+        contacts: state.contacts.map((c) =>
+          c.id === id ? { ...c, unread: 0 } : c
+        ),
+        unreadCounts: chatId
+          ? { ...state.unreadCounts, [chatId]: 0 }
+          : state.unreadCounts,
+      };
+    });
   },
 
   setActiveContactId: (id: number) => {
@@ -292,6 +309,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
             ? { ...c, lastMessage: lastMsgLabel, lastMessageTime: msg.created_at, unread: isActive ? c.unread : c.unread + 1 }
             : c
         ),
+        unreadCounts: {
+          ...state.unreadCounts,
+          [msg.chat_id]: (state.unreadCounts[msg.chat_id] ?? 0) + (isActive ? 0 : 1),
+        },
       };
     });
   },
@@ -317,5 +338,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   setConnected: (connected: boolean) => {
     set({ connected });
+  },
+
+  setPendingRequestsCount: (count: number) => {
+    set({ pendingRequestsCount: count });
+  },
+
+  incrementPendingRequests: () => {
+    set((state) => ({ pendingRequestsCount: state.pendingRequestsCount + 1 }));
+  },
+
+  decrementPendingRequests: () => {
+    set((state) => ({ pendingRequestsCount: Math.max(0, state.pendingRequestsCount - 1) }));
+  },
+
+  setUnreadCounts: (counts: Record<number, number>) => {
+    set({ unreadCounts: counts });
   },
 }));

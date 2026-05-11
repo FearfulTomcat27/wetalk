@@ -7,9 +7,12 @@ import { Avatar } from "@/components/Avatar";
 import type { Contact } from "@/types/chat";
 import { MessageCircle, UserPlus, Loader2, Check, X, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getFriends, getPendingRequests, acceptFriendRequest, declineFriendRequest } from "@/lib/api";
-import type { PendingRequest, FriendInfo } from "@/lib/api";
+import { getFriends, getPendingRequests, acceptFriendRequest, declineFriendRequest, getUnreadCounts } from "@/lib/api";
+import type { PendingRequest, FriendInfo, UserInfo } from "@/lib/api";
 import { toast } from "sonner";
+import { wsClient } from "@/lib/ws";
+import { useAuthStore } from "@/stores/auth";
+import { useChatStore } from "@/stores/chat";
 
 // 宽度常量
 const DEFAULT_CONTACT_WIDTH = 280;
@@ -25,7 +28,9 @@ function mapFriendToContact(f: FriendInfo): Contact {
     username: f.friend_name,
     nickname: f.friend_name,
     avatar: f.friend_avatar,
-    unread: 0,
+    unread: f.unread_count ?? 0,
+    lastMessage: f.last_message,
+    lastMessageTime: f.last_message_time,
   };
 }
 
@@ -48,15 +53,32 @@ export default function ContactsPage() {
   const containerRef = useRef<HTMLDivElement>(null);
 
   const activeContact = contacts.find((c) => c.id === activeContactId) ?? null;
+  const storeSetContacts = useChatStore((s) => s.setContacts);
+  const pendingRequestsCount = useChatStore((s) => s.pendingRequestsCount);
+  const setPendingRequestsCount = useChatStore((s) => s.setPendingRequestsCount);
+  const setUnreadCounts = useChatStore((s) => s.setUnreadCounts);
+  const incrementPendingRequests = useChatStore((s) => s.incrementPendingRequests);
+  const decrementPendingRequests = useChatStore((s) => s.decrementPendingRequests);
 
-  // 加载好友列表
+  // 加载好友列表 & pending 请求数 & 未读消息数 → 同步到 store（供侧边栏角标使用）
   useEffect(() => {
     async function load() {
       setContactsLoading(true);
       try {
-        const res = await getFriends();
-        const mapped: Contact[] = (res.data || []).map(mapFriendToContact);
+        const [friendsRes, pendingRes, unreadRes] = await Promise.all([
+          getFriends(),
+          getPendingRequests(),
+          getUnreadCounts(),
+        ]);
+        const mapped: Contact[] = (friendsRes.data || []).map(mapFriendToContact);
         setContacts(mapped);
+        storeSetContacts(mapped);
+        const count = (pendingRes.data || []).length;
+        setPendingRequestsCount(count);
+        // 将未读消息数组转为 chatId → count 映射
+        const unreadMap: Record<number, number> = {};
+        (unreadRes.data || []).forEach((u) => { unreadMap[u.chat_id] = u.count; });
+        setUnreadCounts(unreadMap);
       } catch {
         // 错误已在拦截器 toast
       } finally {
@@ -64,7 +86,7 @@ export default function ContactsPage() {
       }
     }
     load();
-  }, []);
+  }, [setContacts, storeSetContacts, setPendingRequestsCount, setUnreadCounts]);
 
   // 点击「新的朋友」
   async function handleNewFriends() {
@@ -73,7 +95,9 @@ export default function ContactsPage() {
     setPendingLoading(true);
     try {
       const res = await getPendingRequests();
-      setPendingRequests(res.data || []);
+      const list = res.data || [];
+      setPendingRequests(list);
+      setPendingRequestsCount(list.length);
     } catch {
       // 错误已在拦截器 toast
     } finally {
@@ -92,6 +116,7 @@ export default function ContactsPage() {
       await acceptFriendRequest(reqId);
       toast.success("已同意好友请求");
       setPendingRequests((prev) => prev.filter((r) => r.id !== reqId));
+      decrementPendingRequests();
       // 刷新好友列表
       const fres = await getFriends();
       setContacts((fres.data || []).map(mapFriendToContact));
@@ -116,6 +141,7 @@ export default function ContactsPage() {
       await declineFriendRequest(reqId);
       toast.success("已拒绝好友请求");
       setPendingRequests((prev) => prev.filter((r) => r.id !== reqId));
+      decrementPendingRequests();
     } catch {
       // 错误已在拦截器 toast
     } finally {
@@ -126,6 +152,44 @@ export default function ContactsPage() {
       });
     }
   }
+
+  // WS 实时接收好友请求
+  const userFetched = useAuthStore((s) => s._userFetched);
+  const token = useAuthStore((s) => s.token);
+
+  useEffect(() => {
+    if (!userFetched || !token) {
+      return;
+    }
+
+    wsClient.connect();
+
+    const unsub = wsClient.on("friend.request.new", (payload) => {
+      const data = payload as Record<string, unknown>;
+      const newReq: PendingRequest = {
+        id: data.id as number,
+        createdAt: data.created_at as string,
+        user: {
+          id: data.user_id as number,
+          username: data.username as string,
+          nickname: data.nickname as string,
+          avatar: data.avatar as string,
+        } as UserInfo,
+      };
+      setPendingRequests((prev) => {
+        if (prev.some((r) => r.id === newReq.id)) {
+          return prev;
+        }
+        incrementPendingRequests();
+        return [newReq, ...prev];
+      });
+    });
+
+    return () => {
+      unsub();
+      wsClient.disconnect();
+    };
+  }, [userFetched, token]);
 
   // 拖拽处理
   const handleMouseDown = useCallback((e: ReactMouseEvent) => {
@@ -181,18 +245,18 @@ export default function ContactsPage() {
         showPending ? "bg-[#3b82f6] text-white" : "hover:bg-muted/70 text-foreground",
       )}
     >
-      <div className={cn("flex size-[36px] shrink-0 items-center justify-center rounded-lg shadow-[0_2px_6px_rgba(0,0,0,0.14)]", showPending ? "bg-[#3b82f6] text-white" : "bg-[#3b82f6]/15 text-[#3b82f6]")}>
+      <div className={cn("relative flex size-[36px] shrink-0 items-center justify-center rounded-lg shadow-[0_2px_6px_rgba(0,0,0,0.14)]", showPending ? "bg-[#3b82f6] text-white" : "bg-[#3b82f6]/15 text-[#3b82f6]")}>
         <UserPlus className="size-5" />
+        {pendingRequestsCount > 0 && (
+          <span className="absolute -right-1 -top-1 flex min-w-[16px] items-center justify-center rounded-full bg-destructive px-1 py-0 text-[10px] font-bold leading-4 text-destructive-foreground shadow-sm ring-2 ring-background">
+            {pendingRequestsCount > 99 ? "99+" : pendingRequestsCount}
+          </span>
+        )}
       </div>
       <div className="min-w-0 flex-1">
         <p className="text-sm font-medium">
           新的朋友
         </p>
-        {pendingCount > 0 && (
-          <span className="mt-0.5 inline-block rounded-full bg-destructive px-1.5 py-0 text-[10px] font-bold text-destructive-foreground">
-            {pendingCount > 99 ? "99+" : pendingCount}
-          </span>
-        )}
       </div>
     </button>
   );

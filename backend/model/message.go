@@ -41,6 +41,15 @@ type FileMetadataPayload struct {
 	Height       int    `json:"height,omitempty"`
 }
 
+// UploadResponse 文件上传响应
+type UploadResponse struct {
+	URL         string `json:"url"`
+	ContentType string `json:"content_type"`
+	FileName    string `json:"file_name"`
+	FileSize    int64  `json:"file_size"`
+	FileType    string `json:"file_type"`
+}
+
 // SendMessageRequest 发送消息请求
 type SendMessageRequest struct {
 	ChatID         int64                `json:"chat_id" binding:"required"`

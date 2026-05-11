@@ -2,13 +2,12 @@ package db
 
 import (
 	"fmt"
-	"log"
 	"time"
 
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
 
+	"wetalk/common/logger"
 	"wetalk/config"
 )
 
@@ -23,9 +22,7 @@ func Init(cfg config.DatabaseConfig) error {
 	)
 
 	var err error
-	DB, err = gorm.Open(mysql.Open(dsn), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Info),
-	})
+	DB, err = gorm.Open(mysql.Open(dsn), &gorm.Config{})
 	if err != nil {
 		return fmt.Errorf("打开数据库连接失败: %w", err)
 	}
@@ -45,7 +42,7 @@ func Init(cfg config.DatabaseConfig) error {
 		return fmt.Errorf("数据库连通性测试失败: %w", err)
 	}
 
-	log.Println("数据库连接成功")
+	logger.Module("db").Info("数据库连接成功")
 	return nil
 }
 
@@ -54,11 +51,11 @@ func Close() {
 	if DB != nil {
 		sqlDB, err := DB.DB()
 		if err != nil {
-			log.Printf("获取底层 sql.DB 失败: %v", err)
+			logger.Module("db").Error("获取底层 sql.DB 失败", "err", err)
 			return
 		}
 		if err := sqlDB.Close(); err != nil {
-			log.Printf("关闭数据库连接失败: %v", err)
+			logger.Module("db").Error("关闭数据库连接失败", "err", err)
 		}
 	}
 }

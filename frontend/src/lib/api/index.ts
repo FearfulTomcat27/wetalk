@@ -25,5 +25,5 @@ export { uploadFile } from "./upload";
 export type { UploadResult } from "./upload";
 
 // 消息
-export { sendMessage, getMessages, markAsRead } from "./messages";
-export type { SendMessageRequest } from "./messages";
+export { sendMessage, getMessages, markAsRead, getUnreadCounts } from "./messages";
+export type { SendMessageRequest, UnreadCount } from "./messages";
