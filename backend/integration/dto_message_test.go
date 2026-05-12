@@ -81,7 +81,7 @@ func TestDTOMessage_ListByChat(t *testing.T) {
 	}
 
 	// List in reverse chronological order
-	msgs, err := dto.Message.ListByChat(chat.ID, 0, 10)
+	msgs, err := dto.Message.ListByChat(chat.ID, 1, 0, 10)
 	require.NoError(t, err)
 	assert.Len(t, msgs, 5)
 
@@ -92,7 +92,7 @@ func TestDTOMessage_ListByChat(t *testing.T) {
 	}
 
 	// Test pagination
-	msgs2, err := dto.Message.ListByChat(chat.ID, 0, 2)
+	msgs2, err := dto.Message.ListByChat(chat.ID, 1, 0, 2)
 	require.NoError(t, err)
 	assert.Len(t, msgs2, 2)
 }

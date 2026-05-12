@@ -8,10 +8,12 @@ import { ChatInput } from "@/components/ChatInput";
 import { useChatStore } from "@/stores/chat";
 import { useAuthStore } from "@/stores/auth";
 import { wsClient } from "@/lib/ws";
-import { getFriends, getMessages, markAsRead, getPendingRequests, getUnreadCounts } from "@/lib/api";
+import { getFriends, getMessages, markAsRead, getPendingRequests, getUnreadCounts, deleteChatHistory } from "@/lib/api";
 import type { FriendInfo } from "@/lib/api";
 import type { Contact } from "@/types/chat";
 import { Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 // 宽度常量
 const DEFAULT_CONTACT_WIDTH = 280;
@@ -80,6 +82,8 @@ export default function ChatPage() {
   const setPendingRequestsCount = useChatStore((s) => s.setPendingRequestsCount);
   const incrementPendingRequests = useChatStore((s) => s.incrementPendingRequests);
   const setUnreadCounts = useChatStore((s) => s.setUnreadCounts);
+  const unreadCounts = useChatStore((s) => s.unreadCounts);
+  const removeChatHistory = useChatStore((s) => s.removeChatHistory);
 
   // 仅保留 UI 相关的局部 state
   const [contactsLoading, setContactsLoading] = useState(true);
@@ -88,6 +92,8 @@ export default function ChatPage() {
   const [dragging, setDragging] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  /** 待删除聊天记录的联系人 id，用于确认弹窗 */
+  const [deleteTarget, setDeleteTarget] = useState<number | null>(null);
 
   // 加载好友列表 & pending 请求数 & 未读消息数 → 写入 store
   useEffect(() => {
@@ -210,6 +216,24 @@ export default function ChatPage() {
     }
   }
 
+  function handleDeleteChatHistory(contactId: number) {
+    setDeleteTarget(contactId);
+  }
+
+  function confirmDeleteChatHistory() {
+    if (deleteTarget === null) {return;}
+    const contact = contacts.find((c) => c.id === deleteTarget);
+    const chatId = contact?.chat_id;
+    if (!chatId) {return;}
+    deleteChatHistory(chatId)
+      .then(() => {
+        removeChatHistory(chatId);
+        toast.success("聊天记录已删除");
+      })
+      .catch(() => {});
+    setDeleteTarget(null);
+  }
+
   const chatInputValue = activeContactId ? (inputTexts[activeContactId] ?? "") : "";
   const isSending = activeContactId ? (sending[activeContactId] ?? false) : false;
   const activeContact = contacts.find((c) => c.id === activeContactId) ?? null;
@@ -266,6 +290,8 @@ export default function ChatPage() {
           onSelectContact={handleSelectContact}
           style={{ width: contactWidth }}
           showAddFriend
+          onDeleteChatHistory={handleDeleteChatHistory}
+          unreadCounts={unreadCounts}
         />
       )}
 
@@ -360,6 +386,21 @@ export default function ChatPage() {
           </div>
         )}
       </div>
+
+      {/* 删除聊天记录确认弹窗 */}
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
+        title="删除聊天记录"
+        description={
+          deleteTarget !== null
+            ? `确定删除与 ${contacts.find((c) => c.id === deleteTarget)?.nickname ?? ""} 的聊天记录？此操作仅对你可见。`
+            : ""
+        }
+        confirmText="删除"
+        variant="destructive"
+        onConfirm={confirmDeleteChatHistory}
+      />
     </div>
   );
 }

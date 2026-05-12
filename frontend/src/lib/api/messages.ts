@@ -69,3 +69,11 @@ export function deleteMessage(messageId: number) {
     url: `/api/messages/${messageId}`,
   });
 }
+
+/** 删除某个聊天的全部聊天记录（仅对当前用户生效） */
+export function deleteChatHistory(chatId: number) {
+  return request({
+    method: "DELETE",
+    url: `/api/messages/history/${chatId}`,
+  });
+}

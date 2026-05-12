@@ -141,9 +141,9 @@ func TestMessageService_GetConversation_DefaultsLimit(t *testing.T) {
 	chatSvc := newTestChatService(chatRepo, cache)
 	svc := newTestMessageService(msgRepo, chatSvc, cache)
 
-	msgRepo.On("ListByChat", int64(1), 0, 50).Return([]model.MessageResponse{}, nil)
+	msgRepo.On("ListByChat", int64(1), int64(1), 0, 50).Return([]model.MessageResponse{}, nil)
 
-	resp, err := svc.GetConversation(1, 0, 0)
+	resp, err := svc.GetConversation(1, 1, 0, 0)
 	require.NoError(t, err)
 	assert.NotNil(t, resp)
 

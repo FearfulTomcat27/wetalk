@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/Avatar";
 import { UserPlus } from "lucide-react";
 import { AddFriendDialog } from "@/components/AddFriendDialog";
+import { ContactContextMenu } from "@/components/ContactContextMenu";
 
 interface ContactListProps {
   contacts: Contact[];
@@ -19,6 +20,10 @@ interface ContactListProps {
   showAddFriend?: boolean;
   /** 搜索框下方的自定义内容 */
   headerContent?: React.ReactNode;
+  /** 右键菜单删除聊天记录回调 */
+  onDeleteChatHistory?: (contactId: number) => void;
+  /** chatId → 未读消息数，作为未读数角标的唯一数据源 */
+  unreadCounts?: Record<number, number>;
 }
 
 /** 格式化消息时间：今天→HH:mm，昨天→"昨天"，更早→MM-DD */
@@ -47,9 +52,19 @@ export function ContactList({
   variant = "chat",
   showAddFriend = false,
   headerContent,
+  onDeleteChatHistory,
+  unreadCounts = {},
 }: ContactListProps) {
   const [search, setSearch] = useState("");
   const [addFriendOpen, setAddFriendOpen] = useState(false);
+
+  // 右键菜单状态
+  const [contextMenu, setContextMenu] = useState<{
+    contactId: number;
+    contactName: string;
+    x: number;
+    y: number;
+  } | null>(null);
 
   const filteredContacts = useMemo(() => {
     if (!search.trim()) {return contacts;}
@@ -159,7 +174,8 @@ export function ContactList({
           <ul className="space-y-0.5 px-2 py-1">
             {filteredContacts.map((contact) => {
               const isActive = contact.id === activeContactId;
-              const hasUnread = contact.unread > 0;
+              const unread = contact.chat_id ? (unreadCounts[contact.chat_id] ?? 0) : 0;
+              const hasUnread = unread > 0;
               const isChat = variant === "chat";
               const timeLabel = isChat ? formatTime(contact.lastMessageTime) : null;
 
@@ -168,6 +184,15 @@ export function ContactList({
                   <button
                     type="button"
                     onClick={() => onSelectContact(contact.id)}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      setContextMenu({
+                        contactId: contact.id,
+                        contactName: contact.nickname || contact.username,
+                        x: e.clientX,
+                        y: e.clientY,
+                      });
+                    }}
                     className={cn(
                       "group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-all duration-150",
                       isActive
@@ -186,10 +211,10 @@ export function ContactList({
                           isActive && "bg-white/30 text-white",
                         )}
                       />
-                      {/* 未读红点 — 仅 chat 模式 */}
-                      {isChat && hasUnread && !isActive && (
+                      {/* 未读红点 — 仅 chat 模式，显示在头像右上角 */}
+                      {isChat && hasUnread && (
                         <span className="absolute -right-0.5 -top-0.5 flex min-w-[16px] items-center justify-center rounded-full bg-destructive px-1 py-0 text-[10px] font-bold leading-4 text-destructive-foreground shadow-sm">
-                          {contact.unread > 99 ? "99+" : contact.unread}
+                          {unread > 99 ? "99+" : unread}
                         </span>
                       )}
                     </div>
@@ -220,12 +245,6 @@ export function ContactList({
                             {timeLabel}
                           </span>
                         )}
-                        {/* 活跃状态下的未读标记 — 仅 chat 模式 */}
-                        {isChat && hasUnread && isActive && (
-                          <span className="shrink-0 rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-bold leading-none text-primary-foreground">
-                            {contact.unread > 99 ? "99+" : contact.unread}
-                          </span>
-                        )}
                       </div>
                       {/* 最后消息 — 仅 chat 模式 */}
                       {isChat && contact.lastMessage && (
@@ -250,6 +269,18 @@ export function ContactList({
           </ul>
         )}
       </div>
+
+      {/* 右键菜单 */}
+      {contextMenu && (
+        <ContactContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          contactId={contextMenu.contactId}
+          contactName={contextMenu.contactName}
+          onClose={() => setContextMenu(null)}
+          onDeleteChatHistory={onDeleteChatHistory}
+        />
+      )}
 
       {/* 添加好友弹窗 */}
       <AddFriendDialog open={addFriendOpen} onOpenChange={setAddFriendOpen} />

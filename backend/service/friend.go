@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"wetalk/dto"
 	"wetalk/model"
 	"wetalk/types"
 )
@@ -151,6 +152,22 @@ func (s *FriendService) ListFriends(userID int64, chatOnly ...bool) ([]model.Fri
 	}
 	if friends == nil {
 		friends = []model.FriendshipInfo{}
+	}
+
+	// 过滤已删除聊天记录的最后一条消息（MongoDB chat_deletions 中有记录则隐藏）
+	for i, f := range friends {
+		if f.ChatID == 0 {
+			continue
+		}
+		deletedAt, err := dto.Message.GetChatDeletion(userID, f.ChatID)
+		if err != nil {
+			continue
+		}
+		if deletedAt != nil {
+			friends[i].LastMessage = ""
+			friends[i].LastMessageType = ""
+			friends[i].LastMessageTime = ""
+		}
 	}
 
 	if cacheErr := s.cache.Set(key, friends, 5*time.Minute); cacheErr != nil {

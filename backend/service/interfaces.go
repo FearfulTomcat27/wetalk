@@ -45,7 +45,7 @@ type FriendRepository interface {
 type MessageRepository interface {
 	Create(senderID, chatID int64, content string, contentType string, quoteID *int64, fileMeta *model.FileMetadataPayload) (*model.MessageResponse, error)
 	GetByID(msgID int64) (*model.Message, error)
-	ListByChat(chatID int64, offset, limit int) ([]model.MessageResponse, error)
+	ListByChat(chatID int64, userID int64, offset, limit int) ([]model.MessageResponse, error)
 	MarkAsRead(chatID, userID int64) error
 	GetUnreadCounts(userID int64) ([]dto.UnreadCount, error)
 }

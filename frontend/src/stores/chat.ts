@@ -57,6 +57,7 @@ interface ChatState {
   incrementPendingRequests: () => void;
   decrementPendingRequests: () => void;
   setUnreadCounts: (counts: Record<number, number>) => void;
+  removeChatHistory: (chatId: number) => void;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -287,7 +288,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   receiveMessage: (msg: Message) => {
     set((state) => {
-      // 根据 chat_id 查找对应联系人
       const contact = state.contacts.find((c) => c.chat_id === msg.chat_id);
       if (!contact) {
         return state;
@@ -297,7 +297,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
       if (existing.some((m) => m.id === msg.id)) {
         return state;
       }
-      const isActive = state.activeContactId === contact.id;
+
+      // 判断当前活跃聊天是否就是消息所属的聊天
+      // 直接比较活跃联系人的 chat_id 与消息的 chat_id，避免间接比较 id 导致的偏差
+      let isActive = false;
+      if (state.activeContactId !== null) {
+        const activeContact = state.contacts.find((c) => c.id === state.activeContactId);
+        if (activeContact !== undefined) {
+          isActive = activeContact.chat_id === msg.chat_id;
+        }
+      }
+
       const lastMsgLabel = formatMessagePreview(msg.content, msg.content_type);
       return {
         messages: {
@@ -338,6 +348,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   setConnected: (connected: boolean) => {
     set({ connected });
+  },
+
+  removeChatHistory: (chatId: number) => {
+    set((state) => ({
+      messages: { ...state.messages, [chatId]: [] },
+      contacts: state.contacts.map((c) =>
+        c.chat_id === chatId
+          ? { ...c, lastMessage: undefined, lastMessageTime: undefined, lastMessageType: undefined, unread: 0 }
+          : c
+      ),
+      unreadCounts: { ...state.unreadCounts, [chatId]: 0 },
+    }));
   },
 
   setPendingRequestsCount: (count: number) => {

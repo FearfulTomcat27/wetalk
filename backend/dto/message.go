@@ -25,6 +25,45 @@ type UnreadCount struct {
 	Count  int64 `json:"count"`
 }
 
+// RecordChatDeletion 记录用户删除某个聊天的聊天记录时间戳
+func (r *messageRepo) RecordChatDeletion(userID, chatID int64) error {
+	ctx := context.Background()
+	_, err := db.ChatDeletionCollection().UpdateOne(
+		ctx,
+		bson.M{"user_id": userID, "chat_id": chatID},
+		bson.M{"$set": bson.M{"deleted_at": time.Now()}},
+		options.Update().SetUpsert(true),
+	)
+	return err
+}
+
+// GetChatDeletion 获取用户对某个聊天记录的删除时间戳，未删除时返回 nil
+func (r *messageRepo) GetChatDeletion(userID, chatID int64) (*time.Time, error) {
+	ctx := context.Background()
+	var result struct {
+		DeletedAt time.Time `bson:"deleted_at"`
+	}
+	err := db.ChatDeletionCollection().FindOne(ctx, bson.M{"user_id": userID, "chat_id": chatID}).Decode(&result)
+	if errors.Is(err, mongo.ErrNoDocuments) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &result.DeletedAt, nil
+}
+
+// CleanupDeletedMessages 删除聊天中某个时间戳之前的所有消息
+// 当聊天双方都删除了聊天记录时调用，清理双方都不可见的历史消息
+func (r *messageRepo) CleanupDeletedMessages(chatID int64, cutoff time.Time) error {
+	ctx := context.Background()
+	_, err := db.MsgCollection().DeleteMany(ctx, bson.M{
+		"chat_id":    chatID,
+		"created_at": bson.M{"$lt": cutoff},
+	})
+	return err
+}
+
 // nextMsgID 从 MongoDB counters 集合获取自增 msg_id
 func nextMsgID(ctx context.Context) (int64, error) {
 	var result struct {
@@ -214,16 +253,27 @@ func (r *messageRepo) MarkAsRead(chatID, currentUserID int64) error {
 	return err
 }
 
-// ListByChat 获取聊天消息记录（分页，按时间倒序）
-func (r *messageRepo) ListByChat(chatID int64, offset, limit int) ([]model.MessageResponse, error) {
+// ListByChat 获取聊天消息记录（分页，按时间倒序），已删除的记录会被过滤
+func (r *messageRepo) ListByChat(chatID int64, userID int64, offset, limit int) ([]model.MessageResponse, error) {
 	ctx := context.Background()
+
+	// 检查当前用户是否删除了该聊天的历史记录
+	deletedAt, err := r.GetChatDeletion(userID, chatID)
+	if err != nil {
+		return nil, err
+	}
+
+	filter := bson.M{"chat_id": chatID}
+	if deletedAt != nil {
+		filter["created_at"] = bson.M{"$gte": *deletedAt}
+	}
 
 	findOpts := options.Find().
 		SetSort(bson.M{"created_at": -1}).
 		SetSkip(int64(offset)).
 		SetLimit(int64(limit))
 
-	cursor, err := db.MsgCollection().Find(ctx, bson.M{"chat_id": chatID}, findOpts)
+	cursor, err := db.MsgCollection().Find(ctx, filter, findOpts)
 	if err != nil {
 		return nil, err
 	}
