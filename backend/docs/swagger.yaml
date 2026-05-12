@@ -1,0 +1,24 @@
+basePath: /api
+host: localhost:8080
+info:
+  contact:
+    email: support@wetalk.app
+    name: API Support
+    url: http://www.wetalk.app/support
+  description: WeTalk 在线聊天应用 API 文档
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+  termsOfService: http://swagger.io/terms/
+  title: WeTalk API
+  version: 1.0.0
+paths: {}
+schemes:
+- http
+securityDefinitions:
+  BearerAuth:
+    description: 输入 "Bearer " + JWT token
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

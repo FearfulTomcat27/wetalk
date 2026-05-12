@@ -1,0 +1,32 @@
+{
+    "schemes": [
+        "http"
+    ],
+    "swagger": "2.0",
+    "info": {
+        "description": "WeTalk 在线聊天应用 API 文档",
+        "title": "WeTalk API",
+        "termsOfService": "http://swagger.io/terms/",
+        "contact": {
+            "name": "API Support",
+            "url": "http://www.wetalk.app/support",
+            "email": "support@wetalk.app"
+        },
+        "license": {
+            "name": "MIT",
+            "url": "https://opensource.org/licenses/MIT"
+        },
+        "version": "1.0.0"
+    },
+    "host": "localhost:8080",
+    "basePath": "/api",
+    "paths": {},
+    "securityDefinitions": {
+        "BearerAuth": {
+            "description": "输入 \"Bearer \" + JWT token",
+            "type": "apiKey",
+            "name": "Authorization",
+            "in": "header"
+        }
+    }
+}

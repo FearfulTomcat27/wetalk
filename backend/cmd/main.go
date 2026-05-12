@@ -9,21 +9,41 @@ import (
 	"syscall"
 	"time"
 
-	"wetalk/common"
 	"wetalk/common/logger"
-	"wetalk/config"
 	"wetalk/db"
 	"wetalk/router"
 	"wetalk/ws"
 )
 
+// @title WeTalk API
+// @version 1.0.0
+// @description WeTalk 在线聊天应用 API 文档
+// @termsOfService http://swagger.io/terms/
+
+// @contact.name API Support
+// @contact.url http://www.wetalk.app/support
+// @contact.email support@wetalk.app
+
+// @license.name MIT
+// @license.url https://opensource.org/licenses/MIT
+
+// @host localhost:8080
+// @BasePath /api
+// @schemes http
+
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
+// @description 输入 "Bearer " + JWT token
+
 func main() {
-	// 加载配置
-	cfg, err := config.Load("config.yaml")
+	// 加载配置（wire 构建依赖图）
+	deps, err := BuildDependencies("config.yaml")
 	if err != nil {
 		slog.Error("加载配置失败", "err", err)
 		os.Exit(1)
 	}
+	cfg := deps.Config
 
 	// 初始化日志
 	logger.Init(logger.Config{
@@ -46,19 +66,12 @@ func main() {
 	}
 	defer db.CloseRedis()
 
-	// 创建 Hub 并启动
-	hub := ws.NewHub(nil)
+	// 启动 WebSocket Hub
+	hub := deps.Hub
 	go hub.Run()
 
-	// 初始化 OSS 客户端
-	ossClient := common.NewClient(cfg.OSS)
-
-	// 注册路由（内部构造 service 和 Handler）
-	r := router.Setup(&router.Dependencies{
-		Config:    cfg,
-		Hub:       hub,
-		OSSClient: ossClient,
-	})
+	// 注册路由（wire 已注入 Config、Hub、OSSClient）
+	r := router.Setup(deps)
 
 	runServer(r, hub)
 }

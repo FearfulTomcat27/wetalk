@@ -4,6 +4,8 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 
 	"wetalk/common"
 	"wetalk/config"
@@ -11,6 +13,8 @@ import (
 	"wetalk/middleware"
 	"wetalk/service"
 	"wetalk/ws"
+
+	_ "wetalk/docs"
 )
 
 // Dependencies 路由注册所需的所有依赖
@@ -42,6 +46,9 @@ func Setup(deps *Dependencies) *gin.Engine {
 	r.GET("/ping", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"message": "pong"})
 	})
+
+	// Swagger 文档
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	// WebSocket（认证通过 auth frame，不走 JWT middleware）
 	r.GET("/ws", ws.WSHandler(deps.Hub, deps.Config.JWT.Secret, sendMsgFunc))
