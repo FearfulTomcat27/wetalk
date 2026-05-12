@@ -56,7 +56,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set({ isLoading: true });
       fetchCurrentUser()
         .then((res) => {
-          const { user } = res.data!;
+          const user = res.data!;
           set({ user, isLoading: false, _userFetched: true });
         })
         .catch(() => {
@@ -108,7 +108,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const res = await fetchCurrentUser();
-      const { user } = res.data!;
+      const user = res.data!;
       set({ user, isLoading: false });
     } catch (err) {
       const message =

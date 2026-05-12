@@ -140,8 +140,6 @@ func TestMain(m *testing.M) {
 // migrateMySQL 执行 DDL 迁移（禁用外键检查以避免循环引用）
 func migrateMySQL() {
 	ddls := []string{
-		// 按依赖顺序：先创建 messages（chats 的外键依赖它），
-		// 但由于有循环依赖，全程禁用外键检查
 		`CREATE TABLE IF NOT EXISTS users (
 			id bigint NOT NULL AUTO_INCREMENT,
 			username varchar(64) NOT NULL,
@@ -154,20 +152,7 @@ func migrateMySQL() {
 			UNIQUE KEY idx_username (username)
 		) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 
-		`CREATE TABLE IF NOT EXISTS messages (
-			id bigint NOT NULL AUTO_INCREMENT,
-			chat_id bigint NOT NULL,
-			sender_id bigint NOT NULL,
-			content text COLLATE utf8mb4_unicode_ci NOT NULL,
-			content_type varchar(16) COLLATE utf8mb4_unicode_ci DEFAULT 'text',
-			status varchar(16) COLLATE utf8mb4_unicode_ci DEFAULT 'sent',
-			created_at datetime DEFAULT CURRENT_TIMESTAMP,
-			quote_id bigint DEFAULT NULL,
-			PRIMARY KEY (id),
-			KEY idx_chat_id (chat_id),
-			KEY idx_chat_created (chat_id, created_at)
-		) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-
+		// 消息数据存储在 MongoDB 中，MySQL 不再创建 messages 表
 		`CREATE TABLE IF NOT EXISTS chats (
 			id bigint NOT NULL AUTO_INCREMENT,
 			chat_type varchar(16) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'private',

@@ -364,14 +364,14 @@ export function ChatArea({ messages, currentUserId, contactName, contactUsername
                     <div>
                       <div
                         className="relative overflow-hidden rounded-md cursor-pointer shadow-md"
-                        style={{ maxWidth: 200 }}
+                        style={{ width: 200, height: 150 }}
                         onClick={() => setPreviewImage(msg.content)}
                       >
                         <Image
                           src={msg.content}
                           alt="图片消息"
-                          width={200}
-                          height={150}
+                          fill
+                          sizes="200px"
                           className="object-cover"
                           unoptimized={msg.content.includes("oss-cn-shanghai")}
                         />

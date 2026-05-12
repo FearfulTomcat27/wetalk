@@ -1,5 +1,5 @@
 import { request } from "./request";
-import type { ApiResponse } from "./request";
+import type { UserInfo } from "./users";
 
 export interface LoginRequest {
   username: string;
@@ -33,5 +33,5 @@ export function register(data: RegisterRequest) {
 }
 
 export function fetchCurrentUser() {
-  return request<Omit<AuthResponse, "token">>({ method: "GET", url: "/api/me" });
+  return request<UserInfo>({ method: "GET", url: "/api/me" });
 }
