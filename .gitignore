@@ -1,5 +1,6 @@
 # dependencies
 node_modules/
+.pnpm-store/
 .pnp
 .pnp.*
 
@@ -42,3 +43,8 @@ yarn-error.log*
 *.pem
 *.tsbuildinfo
 next-env.d.ts
+# Claude Code worktrees
+.claude/worktrees/
+
+# Air hot-reload build output
+backend/tmp/

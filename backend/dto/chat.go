@@ -48,7 +48,7 @@ func (r *chatRepo) CreateSingleChat(user1ID, user2ID int64) (*model.Chat, error)
 // FindSingleChatByUserIDs 查找两个用户的单聊（两成员交集查询）
 func (r *chatRepo) FindSingleChatByUserIDs(user1ID, user2ID int64) (*model.Chat, error) {
 	var chat model.Chat
-	err := db.DB.
+	err := db.DB.Select("chats.id, chats.chat_type, chats.created_at, chats.updated_at").
 		Joins("JOIN chat_members cm1 ON cm1.chat_id = chats.id AND cm1.user_id = ?", user1ID).
 		Joins("JOIN chat_members cm2 ON cm2.chat_id = chats.id AND cm2.user_id = ?", user2ID).
 		Where("chats.chat_type = ?", model.ChatTypeSingle).
@@ -87,12 +87,13 @@ func (r *chatRepo) IsMember(chatID, userID int64) (bool, error) {
 }
 
 // UpdateLastMessage 更新聊天的最后一条消息信息
-func (r *chatRepo) UpdateLastMessage(chatID, messageID int64, content string, msgTime time.Time) error {
+func (r *chatRepo) UpdateLastMessage(chatID, messageID int64, content string, contentType string, msgTime time.Time) error {
 	return db.DB.Model(&model.Chat{}).
 		Where("id = ?", chatID).
 		Updates(map[string]interface{}{
 			"last_message_id":   messageID,
 			"last_message_text": content,
+			"last_message_type": contentType,
 			"last_message_time": msgTime,
 		}).Error
 }

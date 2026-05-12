@@ -16,7 +16,7 @@ function extractFilename(url: string): string {
 }
 
 /** 根据消息类型格式化预览文本 */
-function formatMessagePreview(content: string, contentType?: string): string {
+export function formatMessagePreview(content: string, contentType?: string): string {
   if (!contentType || contentType === "text") {return content;}
   if (contentType === "image") {return "[图片]";}
   if (contentType === "file") {return `[文件] ${extractFilename(content)}`;}

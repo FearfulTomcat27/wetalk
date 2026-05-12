@@ -72,6 +72,6 @@ func (s *ChatService) IsMember(chatID, userID int64) (bool, error) {
 }
 
 // UpdateLastMessage 更新聊天的最后一条消息
-func (s *ChatService) UpdateLastMessage(chatID, messageID int64, content string, msgTime time.Time) error {
-	return dto.Chat.UpdateLastMessage(chatID, messageID, content, msgTime)
+func (s *ChatService) UpdateLastMessage(chatID, messageID int64, content string, contentType string, msgTime time.Time) error {
+	return dto.Chat.UpdateLastMessage(chatID, messageID, content, contentType, msgTime)
 }

@@ -1,6 +1,6 @@
 # WeTalk
 
-在线聊天应用，C/S 架构。前端 Next.js 16 (React 19) + Go/gin 后端 + MySQL + Redis。
+在线聊天应用，C/S 架构。前端 Next.js 16 (React 19) + Go/gin 后端 + MySQL + MongoDB + Redis。
 
 ## 功能
 
@@ -35,9 +35,11 @@ wetalk/
 │       ├── lib/api/             # 模块化 API 客户端 (axios, 含 upload)
 │       └── config/              # 路由权限配置
 ├── backend/                     # Go 1.26 后端
-│   ├── cmd/                     # 入口 main.go
-│   ├── config/                  # 配置加载
-│   ├── db/                      # MySQL + Redis 连接
+│   ├── cmd/
+│   │   ├── main.go              # 入口
+│   │   └── migrate_mongo/       # MySQL → MongoDB 数据迁移
+│   ├── config/                  # 配置加载 (DB/Redis/JWT/Mongo/OSS)
+│   ├── db/                      # MySQL + Redis + MongoDB 连接
 │   ├── controller/              # HTTP Handler 层
 │   ├── service/                 # 业务逻辑层
 │   ├── dto/                     # 数据访问层
@@ -70,7 +72,16 @@ cp config.example.yaml config.yaml   # 编辑数据库和 JWT 配置
 go run ./cmd                          # http://localhost:8080
 ```
 
-**前置依赖：** MySQL + Redis 已启动，执行 `scripts/migrations/` SQL 脚本建表。
+**前置依赖：** MySQL + Redis + MongoDB 已启动，执行 `scripts/migrations/` SQL 脚本建表。
+
+消息数据迁移（MySQL → MongoDB）：
+
+```bash
+cd backend
+go run ./cmd/migrate_mongo   # 导入现有消息到 MongoDB
+```
+
+迁移完成后可选删除 MySQL 消息表：执行 `sql/migrations/003_drop_mysql_messages.sql`。
 
 **config.yaml 示例：**
 
@@ -102,6 +113,13 @@ oss:
   region: "cn-shanghai"
   access_key_id: "your-access-key-id"
   access_key_secret: "your-access-key-secret"
+
+mongo:
+  uri: "mongodb://localhost:27017"
+  database: "wetalk"
+```
+
+**注意：** `config.yaml` 不入库，需手动创建。
 ```
 
 ## 技术栈
@@ -114,7 +132,7 @@ oss:
 | 表单验证 | zod v4 |
 | HTTP 客户端 | axios |
 | 后端框架 | gin v1.12 |
-| 数据库 | MySQL |
+| 数据库 | MySQL + MongoDB (mongo-go-driver) |
 | 缓存 | Redis (go-redis/v9) |
 | 认证 | JWT + bcrypt |
 | 实时通信 | WebSocket (gorilla/websocket, auth frame) |
@@ -136,9 +154,10 @@ oss:
 | GET | `/api/friends/pending` | JWT | 待处理好友请求 |
 | PUT | `/api/friends/:id/accept` | JWT | 接受好友请求 |
 | DELETE | `/api/friends/:id` | JWT | 删除/拒绝好友 |
-| POST | `/api/messages` | JWT | 发送消息 |
-| GET | `/api/messages?friend_id=` | JWT | 聊天记录（分页） |
-| PUT | `/api/messages/read` | JWT | 标记已读 |
+| POST | `/api/messages` | JWT | 发送消息 `{chat_id, content, content_type?, quoted_message_id?}` |
+| GET | `/api/messages?chat_id=&offset=&limit=` | JWT | 聊天记录（MongoDB 分页） |
+| GET | `/api/messages/unread` | JWT | 所有聊天的未读消息数 |
+| PUT | `/api/messages/read` | JWT | 标记已读 `{chat_id}` |
 | POST | `/api/upload` | JWT | 上传文件/图片（≤10MB 图片, ≤20MB 文件） |
 | GET | `/ws` | auth frame | WebSocket 连接（实时推送） |
 | GET | `/ping` | 无 | 健康检查 |

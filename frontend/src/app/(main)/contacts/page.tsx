@@ -12,7 +12,7 @@ import type { PendingRequest, FriendInfo, UserInfo } from "@/lib/api";
 import { toast } from "sonner";
 import { wsClient } from "@/lib/ws";
 import { useAuthStore } from "@/stores/auth";
-import { useChatStore } from "@/stores/chat";
+import { useChatStore, formatMessagePreview } from "@/stores/chat";
 
 // 宽度常量
 const DEFAULT_CONTACT_WIDTH = 280;
@@ -29,7 +29,8 @@ function mapFriendToContact(f: FriendInfo): Contact {
     nickname: f.friend_name,
     avatar: f.friend_avatar,
     unread: f.unread_count ?? 0,
-    lastMessage: f.last_message,
+    lastMessage: f.last_message ? formatMessagePreview(f.last_message, f.last_message_type) : undefined,
+    lastMessageType: f.last_message_type,
     lastMessageTime: f.last_message_time,
   };
 }
@@ -71,13 +72,18 @@ export default function ContactsPage() {
           getUnreadCounts(),
         ]);
         const mapped: Contact[] = (friendsRes.data || []).map(mapFriendToContact);
+        // 从 MongoDB 覆盖未读数
+        const unreadMap: Record<number, number> = {};
+        (unreadRes.data || []).forEach((u) => { unreadMap[u.chat_id] = u.count; });
+        for (const c of mapped) {
+          if (c.chat_id && unreadMap[c.chat_id] !== undefined) {
+            c.unread = unreadMap[c.chat_id];
+          }
+        }
         setContacts(mapped);
         storeSetContacts(mapped);
         const count = (pendingRes.data || []).length;
         setPendingRequestsCount(count);
-        // 将未读消息数组转为 chatId → count 映射
-        const unreadMap: Record<number, number> = {};
-        (unreadRes.data || []).forEach((u) => { unreadMap[u.chat_id] = u.count; });
         setUnreadCounts(unreadMap);
       } catch {
         // 错误已在拦截器 toast

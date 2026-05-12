@@ -77,32 +77,41 @@ type ErrorEvent struct {
 
 // MessageNewEvent 新消息通知（发给聊天所有成员）
 type MessageNewEvent struct {
-	Type           string          `json:"type"`
-	ID             int64           `json:"id"`
-	ChatID         int64           `json:"chat_id"`
-	SenderID       int64           `json:"sender_id"`
-	Content        string          `json:"content"`
-	ContentType    string          `json:"content_type"`
-	QuoteMessageID *int64          `json:"quoted_message_id,omitempty"`
-	QuotedContent  *string         `json:"quoted_content,omitempty"`
-	FileMetadata   *WSFileMetadata `json:"file_metadata,omitempty"`
-	Status         string          `json:"status"`
-	CreatedAt      time.Time       `json:"created_at"`
+	Type              string          `json:"type"`
+	ID                int64           `json:"id"`
+	ChatID            int64           `json:"chat_id"`
+	SenderID          int64           `json:"sender_id"`
+	Content           string          `json:"content"`
+	ContentType       string          `json:"content_type"`
+	QuoteMessageID    *int64          `json:"quoted_message_id,omitempty"`
+	QuotedContent     *string         `json:"quoted_content,omitempty"`
+	QuotedSenderID    *int64          `json:"quoted_sender_id,omitempty"`
+	QuotedSenderName  *string         `json:"quoted_sender_name,omitempty"`
+	QuotedContentType *string         `json:"quoted_content_type,omitempty"`
+	QuotedFileMeta    *WSFileMetadata `json:"quoted_file_metadata,omitempty"`
+	FileMetadata      *WSFileMetadata `json:"file_metadata,omitempty"`
+	Status            string          `json:"status"`
+	CreatedAt         time.Time       `json:"created_at"`
 }
 
 // MessageSentEvent 消息发送确认（发给发送者）
 type MessageSentEvent struct {
-	Type           string          `json:"type"`
-	ID             int64           `json:"id"`
-	ChatID         int64           `json:"chat_id"`
-	SenderID       int64           `json:"sender_id"`
-	Content        string          `json:"content"`
-	ContentType    string          `json:"content_type"`
-	QuoteMessageID *int64          `json:"quoted_message_id,omitempty"`
-	FileMetadata   *WSFileMetadata `json:"file_metadata,omitempty"`
-	Status         string          `json:"status"`
-	CreatedAt      time.Time       `json:"created_at"`
-	ClientMsgID    string          `json:"client_msg_id,omitempty"`
+	Type              string          `json:"type"`
+	ID                int64           `json:"id"`
+	ChatID            int64           `json:"chat_id"`
+	SenderID          int64           `json:"sender_id"`
+	Content           string          `json:"content"`
+	ContentType       string          `json:"content_type"`
+	QuoteMessageID    *int64          `json:"quoted_message_id,omitempty"`
+	QuotedContent     *string         `json:"quoted_content,omitempty"`
+	QuotedSenderID    *int64          `json:"quoted_sender_id,omitempty"`
+	QuotedSenderName  *string         `json:"quoted_sender_name,omitempty"`
+	QuotedContentType *string         `json:"quoted_content_type,omitempty"`
+	QuotedFileMeta    *WSFileMetadata `json:"quoted_file_metadata,omitempty"`
+	FileMetadata      *WSFileMetadata `json:"file_metadata,omitempty"`
+	Status            string          `json:"status"`
+	CreatedAt         time.Time       `json:"created_at"`
+	ClientMsgID       string          `json:"client_msg_id,omitempty"`
 }
 
 // PongEvent pong 响应

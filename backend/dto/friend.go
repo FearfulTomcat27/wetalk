@@ -41,7 +41,8 @@ func (r *friendRepo) Create(userID, friendID int64) (*model.FriendRequest, error
 // FindByUserAndFriend 查找两个用户之间的好友记录（单向：user_id → friend_id）
 func (r *friendRepo) FindByUserAndFriend(userID, friendID int64) (*model.FriendRequest, error) {
 	var fr model.FriendRequest
-	err := db.DB.Where("user_id = ? AND friend_id = ?", userID, friendID).First(&fr).Error
+	err := db.DB.Select("id, user_id, friend_id, status, created_at").
+		Where("user_id = ? AND friend_id = ?", userID, friendID).First(&fr).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
@@ -54,8 +55,9 @@ func (r *friendRepo) FindByUserAndFriend(userID, friendID int64) (*model.FriendR
 // FindRequestBetween 查找两个用户之间任意方向的好友请求
 func (r *friendRepo) FindRequestBetween(userID, friendID int64) (*model.FriendRequest, error) {
 	var fr model.FriendRequest
-	err := db.DB.Where("(user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?)",
-		userID, friendID, friendID, userID).First(&fr).Error
+	err := db.DB.Select("id, user_id, friend_id, status, created_at").
+		Where("(user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?)",
+			userID, friendID, friendID, userID).First(&fr).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
@@ -69,7 +71,8 @@ func (r *friendRepo) FindRequestBetween(userID, friendID int64) (*model.FriendRe
 func (r *friendRepo) FindFriendshipBetween(userID, friendID int64) (*model.Friendship, error) {
 	smaller, larger := sortIDs(userID, friendID)
 	var f model.Friendship
-	err := db.DB.Where("user1_id = ? AND user2_id = ?", smaller, larger).First(&f).Error
+	err := db.DB.Select("id, chat_id, user1_id, user2_id, created_at").
+		Where("user1_id = ? AND user2_id = ?", smaller, larger).First(&f).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
@@ -82,7 +85,8 @@ func (r *friendRepo) FindFriendshipBetween(userID, friendID int64) (*model.Frien
 // FindByID 根据 ID 查找好友记录
 func (r *friendRepo) FindByID(id int64) (*model.FriendRequest, error) {
 	var fr model.FriendRequest
-	err := db.DB.Where("id = ?", id).First(&fr).Error
+	err := db.DB.Select("id, user_id, friend_id, status, created_at").
+		Where("id = ?", id).First(&fr).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
@@ -162,8 +166,8 @@ func (r *friendRepo) CreateFriendship(user1ID, user2ID, chatID int64) (*model.Fr
 	return friendship, nil
 }
 
-// FindFriendships 查询用户的所有好友（CTE + UNION ALL 替代 OR 以利用索引）
-// chatOnly 为 true 时只返回有消息记录的好友（供聊天页使用）
+// FindFriendships 查询用户的所有好友
+// 消息未读数已迁移至 MongoDB，此处不再从 MySQL 查询
 func (r *friendRepo) FindFriendships(userID int64, chatOnly ...bool) ([]model.FriendshipInfo, error) {
 	var friendships []model.FriendshipInfo
 
@@ -174,27 +178,18 @@ func (r *friendRepo) FindFriendships(userID int64, chatOnly ...bool) ([]model.Fr
 	}
 
 	query := `
-		WITH unread AS (
-			SELECT m.chat_id, COUNT(*) AS cnt
-			FROM messages m
-			WHERE m.sender_id != ? AND m.status != 'read'
-			  AND m.chat_id IN (SELECT chat_id FROM friendships WHERE user1_id = ? OR user2_id = ?)
-			GROUP BY m.chat_id
-		)
 		SELECT f.id, f.chat_id,
 		       f.user2_id AS friend_id,
 		       u.nickname AS friend_name,
 		       u.avatar AS friend_avatar,
 		       COALESCE(c.last_message_text, '') AS last_message,
-		       COALESCE(m.content_type, 'text') AS last_message_type,
+		       COALESCE(c.last_message_type, 'text') AS last_message_type,
 		       COALESCE(c.last_message_time, '') AS last_message_time,
-		       COALESCE(un.cnt, 0) AS unread_count,
+		       0 AS unread_count,
 		       f.created_at
 		FROM friendships f
 		JOIN users u ON u.id = f.user2_id
 		LEFT JOIN chats c ON c.id = f.chat_id
-		LEFT JOIN messages m ON m.id = c.last_message_id
-		LEFT JOIN unread un ON un.chat_id = f.chat_id
 		WHERE f.user1_id = ?` + chatFilter + `
 
 		UNION ALL
@@ -204,20 +199,18 @@ func (r *friendRepo) FindFriendships(userID int64, chatOnly ...bool) ([]model.Fr
 		       u.nickname AS friend_name,
 		       u.avatar AS friend_avatar,
 		       COALESCE(c.last_message_text, '') AS last_message,
-		       COALESCE(m.content_type, 'text') AS last_message_type,
+		       COALESCE(c.last_message_type, 'text') AS last_message_type,
 		       COALESCE(c.last_message_time, '') AS last_message_time,
-		       COALESCE(un.cnt, 0) AS unread_count,
+		       0 AS unread_count,
 		       f.created_at
 		FROM friendships f
 		JOIN users u ON u.id = f.user1_id
 		LEFT JOIN chats c ON c.id = f.chat_id
-		LEFT JOIN messages m ON m.id = c.last_message_id
-		LEFT JOIN unread un ON un.chat_id = f.chat_id
 		WHERE f.user2_id = ?` + chatFilter + `
 
 		ORDER BY COALESCE(last_message_time, created_at) DESC`
 
-	if err := db.DB.Raw(query, userID, userID, userID, userID, userID).Scan(&friendships).Error; err != nil {
+	if err := db.DB.Raw(query, userID, userID).Scan(&friendships).Error; err != nil {
 		return nil, err
 	}
 	return friendships, nil

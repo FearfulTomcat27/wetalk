@@ -15,6 +15,7 @@ type Chat struct {
 	ChatName        string     `json:"chat_name" gorm:"column:chat_name;type:varchar(128);default:null"`
 	LastMessageID   *int64     `json:"last_message_id" gorm:"column:last_message_id;default:null"`
 	LastMessageText *string    `json:"last_message_text" gorm:"column:last_message_text;type:text;default:null"`
+	LastMessageType string     `json:"last_message_type" gorm:"column:last_message_type;type:varchar(16);default:text"`
 	LastMessageTime *time.Time `json:"last_message_time" gorm:"column:last_message_time;default:null"`
 	CreatedAt       time.Time  `json:"created_at" gorm:"column:created_at;autoCreateTime"`
 	UpdatedAt       time.Time  `json:"updated_at" gorm:"column:updated_at;autoUpdateTime"`

@@ -52,57 +52,18 @@ func (s *MessageService) SendMessage(senderID int64, req model.SendMessageReques
 		contentType = model.ContentTypeText
 	}
 
-	// 创建消息
-	msg, err := dto.Message.Create(senderID, req.ChatID, req.Content, contentType, req.QuoteMessageID)
+	// 创建消息（MongoDB，含嵌入式 file_metadata 和引用消息内容预填充）
+	msgResp, err := dto.Message.Create(senderID, req.ChatID, req.Content, contentType, req.QuoteMessageID, req.FileMetadata)
 	if err != nil {
 		return nil, err
 	}
 
 	// 更新聊天的最后一条消息信息
-	if updateErr := s.chatSvc.UpdateLastMessage(req.ChatID, msg.ID, msg.Content, msg.CreatedAt); updateErr != nil {
-		// 非关键路径，仅记录错误但不中断
+	if updateErr := s.chatSvc.UpdateLastMessage(req.ChatID, msgResp.ID, msgResp.Content, msgResp.ContentType, msgResp.CreatedAt); updateErr != nil {
 		_ = updateErr
 	}
 
-	// 如果有文件元数据，创建 file_metadata 记录
-	var fileMeta *model.FileMetadata
-	if req.FileMetadata != nil {
-		fm, err := dto.FileMetadata.Create(
-			msg.ID,
-			req.FileMetadata.URL,
-			req.FileMetadata.OriginalName,
-			req.FileMetadata.FileSize,
-			req.FileMetadata.MimeType,
-			req.FileMetadata.Width,
-			req.FileMetadata.Height,
-		)
-		if err != nil {
-			return nil, err
-		}
-		fileMeta = fm
-	}
-
-	// 构建引用消息摘要
-	var quotedContent *string
-	if msg.QuoteMessageID != nil {
-		quoted, _ := dto.Message.GetByID(*msg.QuoteMessageID)
-		if quoted != nil {
-			quotedContent = &quoted.Content
-		}
-	}
-
-	return &model.MessageResponse{
-		ID:             msg.ID,
-		ChatID:         msg.ChatID,
-		SenderID:       msg.SenderID,
-		Content:        msg.Content,
-		ContentType:    msg.ContentType,
-		QuoteMessageID: msg.QuoteMessageID,
-		QuotedContent:  quotedContent,
-		FileMetadata:   fileMeta,
-		Status:         msg.Status,
-		CreatedAt:      msg.CreatedAt,
-	}, nil
+	return msgResp, nil
 }
 
 // MarkAsRead 标记消息已读
@@ -111,7 +72,6 @@ func (s *MessageService) MarkAsRead(userID, chatID int64) error {
 	if err != nil {
 		return err
 	}
-	// 未读计数已变更，使缓存失效
 	go func() { _ = common.CacheDel(fmt.Sprintf("unread:%d", userID)) }()
 	return nil
 }
@@ -140,74 +100,20 @@ func (s *MessageService) GetUnreadCounts(userID int64) ([]dto.UnreadCount, error
 }
 
 // GetConversation 获取聊天记录
+// MongoDB 文档自带嵌入式 file_metadata，无需额外查询
 func (s *MessageService) GetConversation(chatID int64, offset, limit int) ([]model.MessageResponse, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 50
 	}
 
-	messages, err := dto.Message.ListByChat(chatID, offset, limit)
+	responses, err := dto.Message.ListByChat(chatID, offset, limit)
 	if err != nil {
 		return nil, err
 	}
 
-	// 批量收集需要查询的 ID
-	var fileMsgIDs []int64
-	var quoteIDs []int64
-	for _, msg := range messages {
-		if msg.ContentType == model.ContentTypeImage || msg.ContentType == model.ContentTypeFile {
-			fileMsgIDs = append(fileMsgIDs, msg.ID)
-		}
-		if msg.QuoteMessageID != nil {
-			quoteIDs = append(quoteIDs, *msg.QuoteMessageID)
-		}
+	if responses == nil {
+		return []model.MessageResponse{}, nil
 	}
-
-	// 批量查询文件元数据
-	metadataMap := make(map[int64]*model.FileMetadata)
-	if len(fileMsgIDs) > 0 {
-		metadataList, err := dto.FileMetadata.ListByMessageIDs(fileMsgIDs)
-		if err == nil {
-			for i := range metadataList {
-				metadataMap[metadataList[i].MessageID] = &metadataList[i]
-			}
-		}
-	}
-
-	// 批量查询引用消息内容
-	quoteMap := make(map[int64]string)
-	if len(quoteIDs) > 0 {
-		quoteList, err := dto.Message.ListByIDs(quoteIDs)
-		if err == nil {
-			for i := range quoteList {
-				quoteMap[quoteList[i].ID] = quoteList[i].Content
-			}
-		}
-	}
-
-	// 构建响应
-	responses := make([]model.MessageResponse, len(messages))
-	for i, msg := range messages {
-		resp := model.MessageResponse{
-			ID:             msg.ID,
-			ChatID:         msg.ChatID,
-			SenderID:       msg.SenderID,
-			Content:        msg.Content,
-			ContentType:    msg.ContentType,
-			QuoteMessageID: msg.QuoteMessageID,
-			Status:         msg.Status,
-			CreatedAt:      msg.CreatedAt,
-		}
-		if fm, ok := metadataMap[msg.ID]; ok {
-			resp.FileMetadata = fm
-		}
-		if msg.QuoteMessageID != nil {
-			if content, ok := quoteMap[*msg.QuoteMessageID]; ok {
-				resp.QuotedContent = &content
-			}
-		}
-		responses[i] = resp
-	}
-
 	return responses, nil
 }
 
@@ -246,17 +152,32 @@ func NewSendMessageFunc(msgSvc *MessageService) ws.SendMessageFunc {
 				Height:       msgResp.FileMetadata.Height,
 			}
 		}
+		var quoteMeta *ws.WSFileMetadata
+		if msgResp.QuotedFileMeta != nil {
+			quoteMeta = &ws.WSFileMetadata{
+				URL:          msgResp.QuotedFileMeta.URL,
+				OriginalName: msgResp.QuotedFileMeta.OriginalName,
+				FileSize:     msgResp.QuotedFileMeta.FileSize,
+				MimeType:     msgResp.QuotedFileMeta.MimeType,
+				Width:        msgResp.QuotedFileMeta.Width,
+				Height:       msgResp.QuotedFileMeta.Height,
+			}
+		}
 		return &ws.SentMessage{
-			ID:             msgResp.ID,
-			ChatID:         msgResp.ChatID,
-			SenderID:       msgResp.SenderID,
-			Content:        msgResp.Content,
-			ContentType:    msgResp.ContentType,
-			QuoteMessageID: msgResp.QuoteMessageID,
-			QuotedContent:  msgResp.QuotedContent,
-			FileMetadata:   meta,
-			Status:         msgResp.Status,
-			CreatedAt:      msgResp.CreatedAt,
+			ID:                msgResp.ID,
+			ChatID:            msgResp.ChatID,
+			SenderID:          msgResp.SenderID,
+			Content:           msgResp.Content,
+			ContentType:       msgResp.ContentType,
+			QuoteMessageID:    msgResp.QuoteMessageID,
+			QuotedContent:     msgResp.QuotedContent,
+			QuotedSenderID:    msgResp.QuotedSenderID,
+			QuotedSenderName:  msgResp.QuotedSenderName,
+			QuotedContentType: msgResp.QuotedContentType,
+			QuotedFileMeta:    quoteMeta,
+			FileMetadata:      meta,
+			Status:            msgResp.Status,
+			CreatedAt:         msgResp.CreatedAt,
 		}, nil
 	}
 }

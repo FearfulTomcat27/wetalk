@@ -84,6 +84,72 @@ interface ChatAreaProps {
  * - 非当前周但同年：显示"M月D日 HH:mm"（如"5月10日 14:30"）
  * - 非今年：显示"YYYY年M月D日 HH:mm"（如"2025年12月28日 14:30"）
  */
+/** 引用消息预览组件：显示发送者 + 右侧竖线 + 图片缩略图/文件图标/文字 */
+function QuotedPreview({ msg, isSelf }: { msg: Message; isSelf: boolean }) {
+  const otherName = msg.quoted_sender_name || "未知用户";
+  const selfName = "你";
+  const displayName = msg.quoted_sender_id === msg.sender_id ? selfName : otherName;
+
+  const nameColor = isSelf ? "text-blue-400" : "text-gray-500";
+  const contentColor = "text-muted-foreground";
+
+  return (
+    <div className={cn(
+      "mt-1 flex items-center gap-2 rounded border-r-2 pr-2 text-xs leading-snug max-w-xs",
+      isSelf ? "border-blue-500/60" : "border-gray-400",
+    )}>
+      <span className={cn("shrink-0 font-medium", nameColor)}>
+        {displayName}：
+      </span>
+      {msg.quoted_content_type === "image" ? (
+        (() => {
+          const imgUrl = msg.quoted_file_metadata?.url || msg.quoted_content;
+          return imgUrl ? (
+            <div className="relative size-[60px] shrink-0 overflow-hidden rounded border">
+              <Image
+                src={imgUrl}
+                alt="引用图片"
+                fill
+                sizes="60px"
+                className="object-cover"
+                unoptimized={imgUrl.includes("oss-cn-shanghai")}
+              />
+            </div>
+          ) : (
+            <span className={cn("truncate", contentColor)}>[图片]</span>
+          );
+        })()
+      ) : msg.quoted_content_type === "file" ? (
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className={cn("truncate", contentColor)}>
+            {msg.quoted_file_metadata?.original_name || "[文件]"}
+          </span>
+          {(() => {
+            const typeInfo = getFileTypeInfo(
+              msg.quoted_file_metadata?.mime_type,
+              msg.quoted_file_metadata?.original_name,
+            );
+            return (
+              <div
+                className="flex size-6 shrink-0 items-center justify-center rounded text-white text-[9px] font-bold leading-none"
+                style={{ backgroundColor: typeInfo.color }}
+              >
+                {typeInfo.label}
+              </div>
+            );
+          })()}
+        </div>
+      ) : (
+        <span className={cn("truncate", contentColor)}>
+          {msg.quoted_content && msg.quoted_content.length > 50
+            ? msg.quoted_content.slice(0, 50) + "..."
+            : msg.quoted_content}
+        </span>
+      )}
+    </div>
+  );
+}
+
 function formatTime(ts: string | number): string {
   const date = new Date(ts);
   const hours = date.getHours().toString().padStart(2, "0");
@@ -288,17 +354,6 @@ export function ChatArea({ messages, currentUserId, contactName, contactUsername
                 <div className="relative max-w-[62%]">
                   {msg.content_type === "image" ? (
                     <div>
-                      {/* 被引用消息预览 */}
-                      {msg.quoted_content && (
-                        <div className={cn(
-                          "mb-1 rounded border-l-2 pl-2 text-xs leading-snug max-w-[200px]",
-                          isSelf ? "border-white/40 text-white/75" : "border-gray-400 text-gray-500",
-                        )}>
-                          {msg.quoted_content.length > 50
-                            ? msg.quoted_content.slice(0, 50) + "..."
-                            : msg.quoted_content}
-                        </div>
-                      )}
                       <div
                         className="relative overflow-hidden rounded-md cursor-pointer shadow-md"
                         style={{ maxWidth: 200 }}
@@ -313,6 +368,10 @@ export function ChatArea({ messages, currentUserId, contactName, contactUsername
                           unoptimized={msg.content.includes("oss-cn-shanghai")}
                         />
                       </div>
+                      {/* 被引用消息预览 */}
+                      {msg.quoted_content && (
+                        <QuotedPreview msg={msg} isSelf={isSelf} />
+                      )}
                     </div>
                   ) : (
                     <>
@@ -325,17 +384,6 @@ export function ChatArea({ messages, currentUserId, contactName, contactUsername
                           msg.content_type === "file" && "p-2.5",
                         )}
                       >
-                        {/* 被引用消息预览 */}
-                        {msg.quoted_content && (
-                          <div className={cn(
-                            "mb-1.5 rounded border-l-2 pl-2 text-xs leading-snug",
-                            isSelf ? "border-white/40 text-white/75" : "border-gray-400 text-gray-500",
-                          )}>
-                            {msg.quoted_content.length > 50
-                              ? msg.quoted_content.slice(0, 50) + "..."
-                              : msg.quoted_content}
-                          </div>
-                        )}
 
                         {msg.content_type === "file" ? (
                           <div
@@ -370,6 +418,10 @@ export function ChatArea({ messages, currentUserId, contactName, contactUsername
                           <p>{msg.content}</p>
                         )}
                       </div>
+                      {/* 被引用消息预览 */}
+                      {msg.quoted_content && (
+                        <QuotedPreview msg={msg} isSelf={isSelf} />
+                      )}
                       {/* 曲线箭头 — 与头像居中对齐 */}
                       {isSelf ? (
                         <svg

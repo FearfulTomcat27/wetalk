@@ -15,10 +15,11 @@ type userRepo struct{}
 // User 用户仓库实例
 var User = &userRepo{}
 
-// FindByUsername 根据用户名查找用户
+// FindByUsername 根据用户名查找用户（登录/注册共用，需 password_hash 做 bcrypt 校验）
 func (r *userRepo) FindByUsername(username string) (*model.User, error) {
 	var u model.User
-	err := db.DB.Where("username = ?", username).First(&u).Error
+	err := db.DB.Select("id, username, password_hash, nickname, avatar, created_at, updated_at").
+		Where("username = ?", username).First(&u).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
@@ -31,7 +32,8 @@ func (r *userRepo) FindByUsername(username string) (*model.User, error) {
 // FindByID 根据 ID 查找用户
 func (r *userRepo) FindByID(id int64) (*model.User, error) {
 	var u model.User
-	err := db.DB.Where("id = ?", id).First(&u).Error
+	err := db.DB.Select("id, username, nickname, avatar, created_at, updated_at").
+		Where("id = ?", id).First(&u).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
@@ -44,7 +46,8 @@ func (r *userRepo) FindByID(id int64) (*model.User, error) {
 // SearchByUsername 根据用户名模糊搜索
 func (r *userRepo) SearchByUsername(keyword string, limit int) ([]model.User, error) {
 	var users []model.User
-	err := db.DB.Where("username LIKE ?", "%"+keyword+"%").
+	err := db.DB.Select("id, username, nickname, avatar").
+		Where("username LIKE ?", "%"+keyword+"%").
 		Limit(limit).
 		Find(&users).Error
 	if err != nil {

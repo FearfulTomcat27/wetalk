@@ -27,6 +27,14 @@ export interface Message {
   quoted_message_id?: number;
   /** 被引用消息的内容（用于预览展示） */
   quoted_content?: string;
+  /** 被引用消息的发送者 ID */
+  quoted_sender_id?: number;
+  /** 被引用消息的发送者用户名 */
+  quoted_sender_name?: string;
+  /** 被引用消息的类型 (text/image/file) */
+  quoted_content_type?: string;
+  /** 被引用消息的文件元数据（图片缩略图/文件图标用） */
+  quoted_file_metadata?: FileMetadata;
 }
 
 export interface FileMetadata {

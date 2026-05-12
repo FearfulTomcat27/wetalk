@@ -99,10 +99,16 @@ export default function ChatPage() {
           getPendingRequests(),
           getUnreadCounts(),
         ]);
-        setContacts((friendsRes.data || []).map(friendToContact));
-        setPendingRequestsCount((pendingRes.data || []).length);
+        const mapped = (friendsRes.data || []).map(friendToContact);
         const unreadMap: Record<number, number> = {};
         (unreadRes.data || []).forEach((u) => { unreadMap[u.chat_id] = u.count; });
+        for (const c of mapped) {
+          if (c.chat_id && unreadMap[c.chat_id] !== undefined) {
+            c.unread = unreadMap[c.chat_id];
+          }
+        }
+        setContacts(mapped);
+        setPendingRequestsCount((pendingRes.data || []).length);
         setUnreadCounts(unreadMap);
       } catch {
         // 错误已在拦截器 toast
@@ -127,6 +133,7 @@ export default function ChatPage() {
   }, [searchParams, contacts, setActiveContactId]);
 
   // 选中联系人时加载历史消息 → 写入 store
+  // 注意：不依赖 contacts 引用，避免乐观 UI 更新 contacts 时误触发导致临时消息被覆盖
   useEffect(() => {
     if (activeContactId === null) {
       return;
@@ -134,7 +141,8 @@ export default function ChatPage() {
     async function load() {
       setMessagesLoading(true);
       try {
-        const activeChatId = contacts.find((c) => c.id === activeContactId)?.chat_id;
+        const allContacts = useChatStore.getState().contacts;
+        const activeChatId = allContacts.find((c) => c.id === activeContactId)?.chat_id;
         if (!activeChatId) {
           setMessagesLoading(false);
           return;
@@ -148,7 +156,7 @@ export default function ChatPage() {
       }
     }
     load();
-  }, [activeContactId, loadMessages, contacts]);
+  }, [activeContactId, loadMessages]);
 
   // 选中联系人时自动聚焦输入框
   useEffect(() => {

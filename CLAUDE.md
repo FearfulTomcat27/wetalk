@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-WeTalk — C/S 模式的在线聊天应用。前端 Next.js 16 (React 19) + Go/gin 后端 + MySQL + Redis + 阿里云 OSS。
+WeTalk — C/S 模式的在线聊天应用。前端 Next.js 16 (React 19) + Go/gin 后端 + MySQL + MongoDB + Redis + 阿里云 OSS。
 
 ## Commands
 
@@ -22,9 +22,10 @@ shadcn/ui 组件用 `npx shadcn@latest add <component>` 添加。
 ### Backend (`backend/`)
 
 ```bash
-go build ./...    # 编译检查
-go run ./cmd      # 启动服务 (:8080)
-go mod tidy       # 整理依赖
+go build ./...             # 编译检查
+go run ./cmd               # 启动服务 (:8080)
+go run ./cmd/migrate_mongo # MySQL → MongoDB 消息迁移
+go mod tidy                # 整理依赖
 ```
 
 **注意：** 配置在 `config.yaml`（不入库，含 DB 密码 + JWT secret），参考 README 示例。
@@ -68,9 +69,11 @@ wetalk/
 │       ├── types/chat.ts        # Contact, Message (含 client_msg_id) 类型
 │       └── hooks/
 ├── backend/                     # Go 1.26, gin v1.12
-│   ├── cmd/main.go              # 入口：依赖注入 + 启动/关闭
-│   ├── config/config.go         # YAML 配置加载 (DB/Redis/JWT)
-│   ├── db/                      # MySQL (sql.DB) + Redis (go-redis/v9) 连接池
+│   ├── cmd/
+│   │   ├── main.go              # 入口：依赖注入 + 启动/关闭
+│   │   └── migrate_mongo/       # MySQL → MongoDB 数据迁移脚本
+│   ├── config/config.go         # YAML 配置加载 (DB/Redis/JWT/Mongo/OSS)
+│   ├── db/                      # MySQL (sql.DB) + Redis (go-redis/v9) + MongoDB 连接池
 │   ├── controller/              # HTTP Handler 层 (user/friend/message/upload)
 │   ├── service/                 # 业务逻辑层 (user/friend/message/chat)
 │   ├── dto/                     # 数据访问层 (SQL 查询)
@@ -131,7 +134,7 @@ wetalk/
 - 前端 `ChatInput` 支持图片/文件上传按钮，图片 ≤10MB，文件 ≤20MB。
 - 后端 `/api/upload` 接收 multipart 请求，上传至阿里云 OSS，key 格式 `uploads/{type}/{user_id}/{timestamp}_{filename}`。
 - 上传成功后返回 `{url, content_type, file_name, file_size, file_type}`。
-- `file_metadata` 表存储文件元数据（URL/原始名称/大小/MIME/宽高），通过 `message_id` 一对一关联消息。
+- 文件元数据嵌入在 MongoDB 消息文档的 `file_metadata` 字段中（MySQL `file_metadata` 表已废弃），无需额外 JOIN 查询。
 
 ### API 对接
 
@@ -143,7 +146,7 @@ wetalk/
 ### Go 后端规范
 
 - 单行 if 必须加大括号。
-- Controller → Service → DTO 三层分离，dto 负责 SQL。
+- Controller → Service → DTO 三层分离，dto 负责数据访问（MySQL 用 GORM，MongoDB 用 mongo-go-driver）。
 - 路由注册集中在 `router/router.go`，main.go 只做依赖组装和启动/关闭。
 - 密码字段 `json:"-"`，密码哈希 bcrypt。
 - 用户注册自动生成 DiceBear avatar URL。
@@ -168,6 +171,23 @@ wetalk/
 - WS-first 发送：connected 时走 WS，离线时 HTTP POST 降级
 - 乐观 UI：发送时生成临时消息（负 id + client_msg_id），收到 message.sent 后替换为服务端真实消息
 
+### MongoDB 消息存储
+
+- 消息数据存储在 MongoDB `messages` 集合中，`file_metadata` 直接嵌入消息文档（`file_metadata` 字段）。
+- 引用消息内容在写入时预填充（`quoted_content` 字段），避免读取时的额外查询。
+- `msg_id` 自增通过 MongoDB `counters` 集合实现（`FindOneAndUpdate` + `$inc`）。
+- 索引：
+  - `(chat_id, created_at)` — 聊天记录分页查询（倒序）
+  - `(chat_id, sender_id, status)` — 未读统计和标记已读
+  - `(msg_id)` — 唯一索引，兼容旧版 int64 ID 查询
+- 启动时自动创建索引，创建失败不阻塞启动（仅日志警告）。
+
+### MySQL 消息表清理
+
+- 消息和 file_metadata 数据从 MySQL 迁移至 MongoDB 后，`messages` 和 `file_metadata` 表可删除。
+- 迁移脚本：`go run ./cmd/migrate_mongo`
+- DDL 清理脚本：`backend/sql/migrations/003_drop_mysql_messages.sql`
+
 ### API 端点
 
 | 方法     | 路径                         | 认证         | 说明                                                        |
@@ -181,9 +201,10 @@ wetalk/
 | GET    | `/api/friends/pending`     | JWT        | 待处理好友请求                                                   |
 | PUT    | `/api/friends/:id/accept`  | JWT        | 接受请求                                                      |
 | DELETE | `/api/friends/:id`         | JWT        | 删除/拒绝好友                                                   |
-| POST   | `/api/messages`            | JWT        | 发送消息 `{receiver_id, content}`                             |
-| GET    | `/api/messages?friend_id=` | JWT        | 聊天记录 (双向查询)                                               |
-| PUT    | `/api/messages/read`       | JWT        | 标记已读 `{sender_id}`                                        |
+| POST   | `/api/messages`            | JWT        | 发送消息 `{chat_id, content, content_type?, quoted_message_id?}` |
+| GET    | `/api/messages?chat_id=&offset=&limit=` | JWT        | 聊天记录 (MongoDB 分页, 按时间倒序)                        |
+| GET    | `/api/messages/unread`     | JWT        | 所有聊天的未读消息数 `[{chat_id, count}]`                        |
+| PUT    | `/api/messages/read`       | JWT        | 标记已读 `{chat_id}`                                          |
 | POST   | `/api/upload`              | JWT        | 上传文件/图片 (multipart, `type=image\|file`, 图片≤10MB, 文件≤20MB) |
 | GET    | `/ws`                      | auth frame | WebSocket 连接 (实时消息推送)                                     |
 | GET    | `/ping`                    | 无          | 健康检查                                                      |

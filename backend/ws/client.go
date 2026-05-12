@@ -22,16 +22,20 @@ type SendMessageFunc func(senderID int64, chatID int64, content string, contentT
 
 // SentMessage 回调返回的消息数据
 type SentMessage struct {
-	ID             int64
-	ChatID         int64
-	SenderID       int64
-	Content        string
-	ContentType    string
-	QuoteMessageID *int64
-	QuotedContent  *string
-	FileMetadata   *WSFileMetadata
-	Status         string
-	CreatedAt      time.Time
+	ID                int64
+	ChatID            int64
+	SenderID          int64
+	Content           string
+	ContentType       string
+	QuoteMessageID    *int64
+	QuotedContent     *string
+	QuotedSenderID    *int64
+	QuotedSenderName  *string
+	QuotedContentType *string
+	QuotedFileMeta    *WSFileMetadata
+	FileMetadata      *WSFileMetadata
+	Status            string
+	CreatedAt         time.Time
 }
 
 // Client WebSocket 客户端
@@ -201,31 +205,40 @@ func (c *Client) handleMessageSend(req *MessageSendRequest) {
 
 	// 发送 message.sent 给发送者
 	c.send <- &MessageSentEvent{
-		Type:           TypeMessageSent,
-		ID:             msg.ID,
-		ChatID:         msg.ChatID,
-		SenderID:       msg.SenderID,
-		Content:        msg.Content,
-		ContentType:    msg.ContentType,
-		QuoteMessageID: msg.QuoteMessageID,
-		FileMetadata:   msg.FileMetadata,
-		Status:         msg.Status,
-		CreatedAt:      msg.CreatedAt,
-		ClientMsgID:    req.ClientMsgID,
+		Type:              TypeMessageSent,
+		ID:                msg.ID,
+		ChatID:            msg.ChatID,
+		SenderID:          msg.SenderID,
+		Content:           msg.Content,
+		ContentType:       msg.ContentType,
+		QuoteMessageID:    msg.QuoteMessageID,
+		QuotedContent:     msg.QuotedContent,
+		QuotedSenderID:    msg.QuotedSenderID,
+		QuotedSenderName:  msg.QuotedSenderName,
+		QuotedContentType: msg.QuotedContentType,
+		QuotedFileMeta:    msg.QuotedFileMeta,
+		FileMetadata:      msg.FileMetadata,
+		Status:            msg.Status,
+		CreatedAt:         msg.CreatedAt,
+		ClientMsgID:       req.ClientMsgID,
 	}
 
 	// 发送 message.new 给聊天所有成员（Hub 内部处理广播）
 	c.hub.SendToChat(req.ChatID, c.userID, &MessageNewEvent{
-		Type:           TypeMessageNew,
-		ID:             msg.ID,
-		ChatID:         msg.ChatID,
-		SenderID:       msg.SenderID,
-		Content:        msg.Content,
-		ContentType:    msg.ContentType,
-		QuoteMessageID: msg.QuoteMessageID,
-		QuotedContent:  msg.QuotedContent,
-		FileMetadata:   msg.FileMetadata,
-		Status:         msg.Status,
-		CreatedAt:      msg.CreatedAt,
+		Type:              TypeMessageNew,
+		ID:                msg.ID,
+		ChatID:            msg.ChatID,
+		SenderID:          msg.SenderID,
+		Content:           msg.Content,
+		ContentType:       msg.ContentType,
+		QuoteMessageID:    msg.QuoteMessageID,
+		QuotedContent:     msg.QuotedContent,
+		QuotedSenderID:    msg.QuotedSenderID,
+		QuotedSenderName:  msg.QuotedSenderName,
+		QuotedContentType: msg.QuotedContentType,
+		QuotedFileMeta:    msg.QuotedFileMeta,
+		FileMetadata:      msg.FileMetadata,
+		Status:            msg.Status,
+		CreatedAt:         msg.CreatedAt,
 	})
 }
