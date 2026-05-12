@@ -45,9 +45,10 @@ wetalk/
 │   ├── dto/                     # 数据访问层
 │   ├── model/                   # 数据模型
 │   ├── common/                  # 共享工具
-│   ├── type/                    # 类型定义 (AppError 业务错误码)
-│   ├── middleware/               # JWT 认证中间件
+│   ├── types/                   # 类型定义 (AppError 业务错误码)
+│   ├── middleware/              # JWT 认证中间件
 │   ├── ws/                      # WebSocket
+│   ├── integration/             # 集成测试（testcontainers, 78 测试用例）
 │   └── scripts/migrations/      # SQL 脚本 (建表)
 └── CLAUDE.md                    # AI 助手指南
 ```
@@ -82,6 +83,25 @@ go run ./cmd/migrate_mongo   # 导入现有消息到 MongoDB
 ```
 
 迁移完成后可选删除 MySQL 消息表：执行 `sql/migrations/003_drop_mysql_messages.sql`。
+
+## 测试
+
+需要 Docker Desktop 运行中（testcontainers 自动启动 MySQL/Redis/MongoDB 容器）。
+
+```bash
+cd backend
+
+# 单元测试
+go test ./...
+
+# 集成测试
+go test --tags=integration -count=1 -timeout 120s ./integration/...
+
+# gotestsum 格式化输出
+gotestsum -- -tags=integration -count=1 -timeout 120s ./integration/...
+```
+
+现有 78 个集成测试用例，覆盖用户注册/登录、好友管理、消息收发、未读统计等功能。
 
 **config.yaml 示例：**
 

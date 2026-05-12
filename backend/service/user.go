@@ -12,8 +12,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 
-	"wetalk/common"
-	"wetalk/dto"
+	"wetalk/config"
 	"wetalk/model"
 	"wetalk/types"
 )
@@ -22,14 +21,19 @@ import (
 type UserService struct {
 	jwtSecret      string
 	jwtExpireHours int
-	ossClient      *common.Client
+	userRepo       UserRepository
+	cache          Cache
+	ossClient      ObjectStorage
 }
 
 // NewUserService 创建用户业务逻辑服务
-func NewUserService(jwtSecret string, jwtExpireHours int, ossClient *common.Client) *UserService {
+// 参数 userRepo 提供用户数据访问，cache 提供缓存能力
+func NewUserService(userRepo UserRepository, cache Cache, jwtCfg config.JWTConfig, ossClient ObjectStorage) *UserService {
 	return &UserService{
-		jwtSecret:      jwtSecret,
-		jwtExpireHours: jwtExpireHours,
+		userRepo:       userRepo,
+		cache:          cache,
+		jwtSecret:      jwtCfg.Secret,
+		jwtExpireHours: jwtCfg.ExpireHours,
 		ossClient:      ossClient,
 	}
 }
@@ -37,7 +41,7 @@ func NewUserService(jwtSecret string, jwtExpireHours int, ossClient *common.Clie
 // Register 注册业务逻辑
 func (s *UserService) Register(req model.RegisterRequest) (*model.AuthResponse, error) {
 	// 检查用户名是否已存在
-	existUser, err := dto.User.FindByUsername(req.Username)
+	existUser, err := s.userRepo.FindByUsername(req.Username)
 	if err != nil {
 		return nil, err
 	}
@@ -61,7 +65,7 @@ func (s *UserService) Register(req model.RegisterRequest) (*model.AuthResponse, 
 	avatar := "https://api.dicebear.com/9.x/micah/svg?seed=" + url.QueryEscape(req.Username)
 
 	// 创建用户
-	user, err := dto.User.Create(req.Username, string(hashedPassword), nickname, avatar)
+	user, err := s.userRepo.Create(req.Username, string(hashedPassword), nickname, avatar)
 	if err != nil {
 		return nil, err
 	}
@@ -83,7 +87,7 @@ func (s *UserService) Register(req model.RegisterRequest) (*model.AuthResponse, 
 // Login 登录业务逻辑
 func (s *UserService) Login(req model.LoginRequest) (*model.AuthResponse, error) {
 	// 查询用户
-	user, err := dto.User.FindByUsername(req.Username)
+	user, err := s.userRepo.FindByUsername(req.Username)
 	if err != nil {
 		return nil, err
 	}
@@ -112,16 +116,16 @@ func (s *UserService) Login(req model.LoginRequest) (*model.AuthResponse, error)
 func (s *UserService) GetUserByID(id int64) (*model.User, error) {
 	key := fmt.Sprintf("user:%d", id)
 	var user model.User
-	if ok, _ := common.CacheGet(key, &user); ok {
+	if ok, _ := s.cache.Get(key, &user); ok {
 		return &user, nil
 	}
 
-	userPtr, err := dto.User.FindByID(id)
+	userPtr, err := s.userRepo.FindByID(id)
 	if err != nil || userPtr == nil {
 		return userPtr, err
 	}
 
-	if cacheErr := common.CacheSet(key, *userPtr, 10*time.Minute); cacheErr != nil {
+	if cacheErr := s.cache.Set(key, *userPtr, 10*time.Minute); cacheErr != nil {
 		_ = cacheErr
 	}
 	return userPtr, nil
@@ -132,7 +136,7 @@ func (s *UserService) SearchUsers(keyword string) ([]model.User, error) {
 	if keyword == "" {
 		return []model.User{}, nil
 	}
-	return dto.User.SearchByUsername(keyword, 20)
+	return s.userRepo.SearchByUsername(keyword, 20)
 }
 
 // generateToken 生成 JWT 令牌
@@ -181,12 +185,12 @@ func (s *UserService) UploadAvatar(ctx context.Context, userID int64, file io.Re
 	}
 
 	// 更新 DB
-	if err := dto.User.UpdateAvatar(userID, avatarURL); err != nil {
+	if err := s.userRepo.UpdateAvatar(userID, avatarURL); err != nil {
 		return "", err
 	}
 
 	// 用户信息已变更，使缓存失效
-	go func() { _ = common.CacheDel(fmt.Sprintf("user:%d", userID)) }()
+	go func() { _ = s.cache.Del(fmt.Sprintf("user:%d", userID)) }()
 
 	return avatarURL, nil
 }

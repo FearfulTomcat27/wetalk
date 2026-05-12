@@ -171,7 +171,15 @@ function formatTime(ts: string | number): string {
   sunday.setHours(23, 59, 59, 999);
 
   if (date >= monday && date <= sunday) {
-    // 昨天优先
+    // 今天只显示时间
+    if (
+      date.getFullYear() === now.getFullYear() &&
+      date.getMonth() === now.getMonth() &&
+      date.getDate() === now.getDate()
+    ) {
+      return timeStr;
+    }
+    // 昨天
     const yesterday = new Date(now);
     yesterday.setDate(now.getDate() - 1);
     if (

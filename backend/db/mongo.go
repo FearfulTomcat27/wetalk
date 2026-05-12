@@ -43,7 +43,7 @@ func InitMongo(cfg config.MongoConfig) error {
 	MongoDB = client.Database(cfg.Database)
 
 	// 创建索引
-	if err := ensureIndexes(); err != nil {
+	if err := EnsureIndexes(); err != nil {
 		// 索引创建失败不阻塞启动，仅记录警告
 		logger.Module("mongo").Warn("创建索引失败", "err", err)
 	}
@@ -73,8 +73,8 @@ func CountersCollection() *mongo.Collection {
 	return MongoDB.Collection("counters")
 }
 
-// ensureIndexes 创建必要的索引
-func ensureIndexes() error {
+// EnsureIndexes 创建必要的索引
+func EnsureIndexes() error {
 	ctx := context.Background()
 
 	// 消息集合索引

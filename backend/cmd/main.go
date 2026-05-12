@@ -66,6 +66,13 @@ func main() {
 	}
 	defer db.CloseRedis()
 
+	// 初始化 MongoDB
+	if err := db.InitMongo(cfg.Mongo); err != nil {
+		slog.Error("初始化 MongoDB 失败", "err", err)
+		os.Exit(1)
+	}
+	defer db.CloseMongo()
+
 	// 启动 WebSocket Hub
 	hub := deps.Hub
 	go hub.Run()

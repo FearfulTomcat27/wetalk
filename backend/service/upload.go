@@ -7,18 +7,17 @@ import (
 	"strings"
 	"time"
 
-	"wetalk/common"
 	"wetalk/model"
 	"wetalk/types"
 )
 
 // UploadService 文件上传业务逻辑
 type UploadService struct {
-	ossClient *common.Client
+	ossClient ObjectStorage
 }
 
 // NewUploadService 创建上传服务
-func NewUploadService(ossClient *common.Client) *UploadService {
+func NewUploadService(ossClient ObjectStorage) *UploadService {
 	return &UploadService{ossClient: ossClient}
 }
 

@@ -22,10 +22,15 @@ shadcn/ui 组件用 `npx shadcn@latest add <component>` 添加。
 ### Backend (`backend/`)
 
 ```bash
-go build ./...             # 编译检查
-go run ./cmd               # 启动服务 (:8080)
-go run ./cmd/migrate_mongo # MySQL → MongoDB 消息迁移
-go mod tidy                # 整理依赖
+go build ./...                    # 编译检查
+go run ./cmd                      # 启动服务 (:8080)
+go run ./cmd/migrate_mongo        # MySQL → MongoDB 消息迁移
+go mod tidy                       # 整理依赖
+
+# 测试（需要 Docker Desktop 运行中）
+go test ./...                     # 单元测试
+go test --tags=integration ./...  # 集成测试（启动 MySQL/Redis/MongoDB 容器）
+gotestsum -- -tags=integration -count=1 -timeout 120s ./...  # 集成测试（gotestsum 格式化输出）
 ```
 
 **注意：** 配置在 `config.yaml`（不入库，含 DB 密码 + JWT secret），参考 README 示例。
@@ -79,9 +84,10 @@ wetalk/
 │   ├── dto/                     # 数据访问层 (SQL 查询)
 │   ├── model/                   # 数据模型 & 请求/响应结构体
 │   ├── common/                  # 共享工具 (Response 辅助函数, OSS Client)
-│   ├── type/                    # 类型定义 (AppError 业务错误码, Response 结构体)
+│   ├── types/                   # 类型定义 (AppError 业务错误码, Response 结构体)
 │   ├── middleware/auth.go       # JWT Bearer token 解析 → 注入 user_id
 │   ├── ws/                      # WebSocket (Hub + Client + auth frame 认证)
+│   ├── integration/             # 集成测试（testcontainers, 78 测试用例）
 │   └── scripts/migrations/      # SQL 迁移 (users/friends/messages/file_metadata 表)
 ```
 
@@ -153,6 +159,10 @@ wetalk/
 - SQL 迁移按编号命名，`config.yaml` 不入库。
 - WebSocket 认证采用 auth frame 方案（首条消息 `{"type":"auth","token":"<JWT>"}`），不走 JWT middleware。
 - 业务错误使用 `types.AppError`（含 Code/Message/HTTPStatus），controller 通过 `errors.As` + `common.AppError` 统一响应。
+- **新增 controller 模块时**：
+  1. 在 handler 方法上添加 swagger 注释（参考 `controller/user.go` 的 `@Summary`/`@Description`/`@Tags`/`@Param`/`@Success`/`@Failure`/`@Router`），然后运行 `swag init -g cmd/main.go -o docs/` 重新生成文档。
+  2. 在 `cmd/providers.go` 添加 provider 函数，在 `cmd/wire.go` 的 `wire.Build` 中注册，在 `router/router.go` 的 `Dependencies` 结构体中添加字段。
+- **新增 service 模块时**：如需对接 DTO 层，在 `service/interfaces.go` 中定义 Repository 接口，在 `cmd/providers.go` 添加对应的 provider 实现绑定。
 
 ### 前端状态管理 (zustand)
 

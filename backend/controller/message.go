@@ -24,10 +24,9 @@ type MessageHandler struct {
 }
 
 // NewMessageHandler 创建消息处理器
-func NewMessageHandler(hub *ws.Hub) *MessageHandler {
-	chatSvc := service.NewChatService()
+func NewMessageHandler(svc *service.MessageService, chatSvc *service.ChatService, hub *ws.Hub) *MessageHandler {
 	return &MessageHandler{
-		svc:     service.NewMessageService(chatSvc),
+		svc:     svc,
 		chatSvc: chatSvc,
 		hub:     hub,
 	}
@@ -39,6 +38,18 @@ func (h *MessageHandler) Service() *service.MessageService {
 }
 
 // Send 发送消息
+// @Summary 发送消息
+// @Description 发送文本/图片/文件消息，支持引用回复；通过 WebSocket 实时推送给聊天中的在线成员
+// @Tags 消息
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body model.SendMessageRequest true "消息内容"
+// @Success 201 {object} types.Response{data=model.MessageResponse} "消息已发送"
+// @Failure 400 {object} types.Response "参数错误"
+// @Failure 401 {object} types.Response "未认证"
+// @Failure 403 {object} types.Response "不是聊天成员"
+// @Router /api/messages [post]
 func (h *MessageHandler) Send(c *gin.Context) {
 	senderID := c.GetInt64("user_id")
 
@@ -97,6 +108,17 @@ func (h *MessageHandler) Send(c *gin.Context) {
 }
 
 // Read 标记消息已读
+// @Summary 标记消息已读
+// @Description 将指定聊天中来自对方的消息全部标记为已读
+// @Tags 消息
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body object{chat_id=int} true "聊天 ID"
+// @Success 200 {object} types.Response "已标记已读"
+// @Failure 400 {object} types.Response "参数错误"
+// @Failure 401 {object} types.Response "未认证"
+// @Router /api/messages/read [put]
 func (h *MessageHandler) Read(c *gin.Context) {
 	userID := c.GetInt64("user_id")
 
@@ -117,6 +139,14 @@ func (h *MessageHandler) Read(c *gin.Context) {
 }
 
 // Unread 获取当前用户所有聊天的未读消息数
+// @Summary 获取未读消息数
+// @Description 获取当前用户在所有聊天中的未读消息数量（供侧边栏角标使用）
+// @Tags 消息
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} types.Response{data=[]dto.UnreadCount} "成功"
+// @Failure 401 {object} types.Response "未认证"
+// @Router /api/messages/unread [get]
 func (h *MessageHandler) Unread(c *gin.Context) {
 	userID := c.GetInt64("user_id")
 
@@ -133,6 +163,18 @@ func (h *MessageHandler) Unread(c *gin.Context) {
 }
 
 // List 获取聊天记录
+// @Summary 获取聊天记录
+// @Description 获取指定聊天的历史消息记录（按时间倒序，支持分页）
+// @Tags 消息
+// @Produce json
+// @Security BearerAuth
+// @Param chat_id query int true "聊天 ID"
+// @Param offset query int false "偏移量（默认 0）"
+// @Param limit query int false "每页数量（默认 50）"
+// @Success 200 {object} types.Response{data=[]model.MessageResponse} "成功"
+// @Failure 400 {object} types.Response "参数错误"
+// @Failure 401 {object} types.Response "未认证"
+// @Router /api/messages [get]
 func (h *MessageHandler) List(c *gin.Context) {
 	chatIDStr := c.Query("chat_id")
 	chatID, err := strconv.ParseInt(chatIDStr, 10, 64)

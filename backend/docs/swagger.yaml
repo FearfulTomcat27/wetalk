@@ -1,4 +1,231 @@
 basePath: /api
+definitions:
+  dto.UnreadCount:
+    properties:
+      chat_id:
+        type: integer
+      count:
+        type: integer
+    type: object
+  model.AddFriendRequest:
+    properties:
+      friend_id:
+        type: integer
+    required:
+    - friend_id
+    type: object
+  model.AuthResponse:
+    properties:
+      token:
+        type: string
+      user:
+        $ref: '#/definitions/model.User'
+    type: object
+  model.FileMetadata:
+    properties:
+      created_at:
+        type: string
+      file_size:
+        type: integer
+      height:
+        type: integer
+      id:
+        type: integer
+      message_id:
+        type: integer
+      mime_type:
+        type: string
+      original_name:
+        type: string
+      url:
+        type: string
+      width:
+        type: integer
+    type: object
+  model.FileMetadataPayload:
+    properties:
+      file_size:
+        type: integer
+      height:
+        type: integer
+      mime_type:
+        type: string
+      original_name:
+        type: string
+      url:
+        type: string
+      width:
+        type: integer
+    type: object
+  model.FriendRequest:
+    properties:
+      created_at:
+        type: string
+      friend_id:
+        type: integer
+      id:
+        type: integer
+      status:
+        type: string
+      updated_at:
+        type: string
+      user_id:
+        type: integer
+    type: object
+  model.FriendshipInfo:
+    properties:
+      chat_id:
+        type: integer
+      created_at:
+        type: string
+      friend_avatar:
+        type: string
+      friend_id:
+        type: integer
+      friend_name:
+        type: string
+      id:
+        type: integer
+      last_message:
+        type: string
+      last_message_time:
+        type: string
+      last_message_type:
+        type: string
+      unread_count:
+        type: integer
+    type: object
+  model.LoginRequest:
+    properties:
+      password:
+        type: string
+      username:
+        type: string
+    required:
+    - password
+    - username
+    type: object
+  model.MessageResponse:
+    properties:
+      chat_id:
+        type: integer
+      content:
+        type: string
+      content_type:
+        type: string
+      created_at:
+        type: string
+      file_metadata:
+        $ref: '#/definitions/model.FileMetadata'
+      id:
+        type: integer
+      quoted_content:
+        type: string
+      quoted_content_type:
+        type: string
+      quoted_file_metadata:
+        $ref: '#/definitions/model.FileMetadata'
+      quoted_message_id:
+        type: integer
+      quoted_sender_id:
+        type: integer
+      quoted_sender_name:
+        type: string
+      sender_id:
+        type: integer
+      status:
+        type: string
+    type: object
+  model.PendingRequest:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: integer
+      status:
+        type: string
+      user:
+        $ref: '#/definitions/model.SenderInfo'
+    type: object
+  model.RegisterRequest:
+    properties:
+      nickname:
+        maxLength: 128
+        type: string
+      password:
+        maxLength: 128
+        minLength: 6
+        type: string
+      username:
+        maxLength: 64
+        minLength: 3
+        type: string
+    required:
+    - password
+    - username
+    type: object
+  model.SendMessageRequest:
+    properties:
+      chat_id:
+        type: integer
+      content:
+        type: string
+      content_type:
+        type: string
+      file_metadata:
+        $ref: '#/definitions/model.FileMetadataPayload'
+      quoted_message_id:
+        type: integer
+    required:
+    - chat_id
+    - content
+    type: object
+  model.SenderInfo:
+    properties:
+      avatar:
+        type: string
+      id:
+        type: integer
+      nickname:
+        type: string
+      username:
+        type: string
+    type: object
+  model.UploadResponse:
+    properties:
+      content_type:
+        type: string
+      file_name:
+        type: string
+      file_size:
+        type: integer
+      file_type:
+        type: string
+      url:
+        type: string
+    type: object
+  model.User:
+    properties:
+      avatar:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: integer
+      nickname:
+        type: string
+      updated_at:
+        type: string
+      username:
+        type: string
+    type: object
+  types.Response:
+    properties:
+      code: {}
+      data: {}
+      message:
+        type: string
+    type: object
 host: localhost:8080
 info:
   contact:
@@ -12,7 +239,508 @@ info:
   termsOfService: http://swagger.io/terms/
   title: WeTalk API
   version: 1.0.0
-paths: {}
+paths:
+  /api/auth/login:
+    post:
+      consumes:
+      - application/json
+      description: 使用用户名和密码登录，返回 JWT token 和用户信息
+      parameters:
+      - description: 登录信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/model.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 登录成功
+          schema:
+            allOf:
+            - $ref: '#/definitions/types.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/model.AuthResponse'
+              type: object
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/types.Response'
+        "401":
+          description: 用户名或密码错误
+          schema:
+            $ref: '#/definitions/types.Response'
+      summary: 用户登录
+      tags:
+      - 用户
+  /api/auth/register:
+    post:
+      consumes:
+      - application/json
+      description: 使用用户名和密码注册新用户，自动生成默认头像
+      parameters:
+      - description: 注册信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/model.RegisterRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: 注册成功
+          schema:
+            allOf:
+            - $ref: '#/definitions/types.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/model.AuthResponse'
+              type: object
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/types.Response'
+        "409":
+          description: 用户名已存在
+          schema:
+            $ref: '#/definitions/types.Response'
+      summary: 用户注册
+      tags:
+      - 用户
+  /api/friends:
+    get:
+      description: 获取当前用户的好友列表，可选仅显示有聊天的好友
+      parameters:
+      - description: 是否仅显示有聊天的好友 (1=是)
+        in: query
+        name: chatted
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功
+          schema:
+            allOf:
+            - $ref: '#/definitions/types.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/model.FriendshipInfo'
+                  type: array
+              type: object
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/types.Response'
+      security:
+      - BearerAuth: []
+      summary: 获取好友列表
+      tags:
+      - 好友
+    post:
+      consumes:
+      - application/json
+      description: 向指定用户发送好友请求，并通过 WebSocket 实时推送给接收方
+      parameters:
+      - description: 好友请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/model.AddFriendRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: 好友请求已发送
+          schema:
+            allOf:
+            - $ref: '#/definitions/types.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/model.FriendRequest'
+              type: object
+        "400":
+          description: 参数错误或不能添加自己
+          schema:
+            $ref: '#/definitions/types.Response'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/types.Response'
+        "409":
+          description: 请求已存在
+          schema:
+            $ref: '#/definitions/types.Response'
+      security:
+      - BearerAuth: []
+      summary: 发送好友请求
+      tags:
+      - 好友
+  /api/friends/{id}:
+    delete:
+      description: 删除与指定用户的好友关系
+      parameters:
+      - description: 好友 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 已删除好友
+          schema:
+            $ref: '#/definitions/types.Response'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/types.Response'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/types.Response'
+        "404":
+          description: 好友关系不存在
+          schema:
+            $ref: '#/definitions/types.Response'
+      security:
+      - BearerAuth: []
+      summary: 删除好友
+      tags:
+      - 好友
+  /api/friends/{id}/accept:
+    put:
+      description: 接受一个待处理的好友请求，建立好友关系并创建聊天会话
+      parameters:
+      - description: 好友请求 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 已接受好友请求
+          schema:
+            $ref: '#/definitions/types.Response'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/types.Response'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/types.Response'
+        "403":
+          description: 无权操作
+          schema:
+            $ref: '#/definitions/types.Response'
+      security:
+      - BearerAuth: []
+      summary: 接受好友请求
+      tags:
+      - 好友
+  /api/friends/pending:
+    get:
+      description: 获取当前用户收到的待处理好友请求列表
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功
+          schema:
+            allOf:
+            - $ref: '#/definitions/types.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/model.PendingRequest'
+                  type: array
+              type: object
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/types.Response'
+      security:
+      - BearerAuth: []
+      summary: 获取待处理的好友请求
+      tags:
+      - 好友
+  /api/me:
+    get:
+      description: 获取当前登录用户的完整信息
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功
+          schema:
+            $ref: '#/definitions/types.Response'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/types.Response'
+      security:
+      - BearerAuth: []
+      summary: 获取当前用户信息
+      tags:
+      - 用户
+  /api/me/avatar:
+    post:
+      consumes:
+      - multipart/form-data
+      description: 上传用户头像图片（仅支持 jpg/png/gif/webp，最大 2MB）
+      parameters:
+      - description: 头像文件
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 上传成功
+          schema:
+            $ref: '#/definitions/types.Response'
+        "400":
+          description: 参数错误或格式不支持
+          schema:
+            $ref: '#/definitions/types.Response'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/types.Response'
+      security:
+      - BearerAuth: []
+      summary: 上传头像
+      tags:
+      - 用户
+  /api/messages:
+    get:
+      description: 获取指定聊天的历史消息记录（按时间倒序，支持分页）
+      parameters:
+      - description: 聊天 ID
+        in: query
+        name: chat_id
+        required: true
+        type: integer
+      - description: 偏移量（默认 0）
+        in: query
+        name: offset
+        type: integer
+      - description: 每页数量（默认 50）
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功
+          schema:
+            allOf:
+            - $ref: '#/definitions/types.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/model.MessageResponse'
+                  type: array
+              type: object
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/types.Response'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/types.Response'
+      security:
+      - BearerAuth: []
+      summary: 获取聊天记录
+      tags:
+      - 消息
+    post:
+      consumes:
+      - application/json
+      description: 发送文本/图片/文件消息，支持引用回复；通过 WebSocket 实时推送给聊天中的在线成员
+      parameters:
+      - description: 消息内容
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/model.SendMessageRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: 消息已发送
+          schema:
+            allOf:
+            - $ref: '#/definitions/types.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/model.MessageResponse'
+              type: object
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/types.Response'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/types.Response'
+        "403":
+          description: 不是聊天成员
+          schema:
+            $ref: '#/definitions/types.Response'
+      security:
+      - BearerAuth: []
+      summary: 发送消息
+      tags:
+      - 消息
+  /api/messages/read:
+    put:
+      consumes:
+      - application/json
+      description: 将指定聊天中来自对方的消息全部标记为已读
+      parameters:
+      - description: 聊天 ID
+        in: body
+        name: request
+        required: true
+        schema:
+          properties:
+            chat_id:
+              type: integer
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 已标记已读
+          schema:
+            $ref: '#/definitions/types.Response'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/types.Response'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/types.Response'
+      security:
+      - BearerAuth: []
+      summary: 标记消息已读
+      tags:
+      - 消息
+  /api/messages/unread:
+    get:
+      description: 获取当前用户在所有聊天中的未读消息数量（供侧边栏角标使用）
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功
+          schema:
+            allOf:
+            - $ref: '#/definitions/types.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/dto.UnreadCount'
+                  type: array
+              type: object
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/types.Response'
+      security:
+      - BearerAuth: []
+      summary: 获取未读消息数
+      tags:
+      - 消息
+  /api/upload:
+    post:
+      consumes:
+      - multipart/form-data
+      description: 上传图片或文件到阿里云 OSS，图片最大 10MB，文件最大 20MB
+      parameters:
+      - description: 上传类型 (image/file)
+        in: formData
+        name: type
+        required: true
+        type: string
+      - description: 上传文件
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 上传成功
+          schema:
+            allOf:
+            - $ref: '#/definitions/types.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/model.UploadResponse'
+              type: object
+        "400":
+          description: 参数错误或类型错误或文件过大
+          schema:
+            $ref: '#/definitions/types.Response'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/types.Response'
+      security:
+      - BearerAuth: []
+      summary: 上传文件
+      tags:
+      - 上传
+  /api/users:
+    get:
+      description: 根据关键词搜索用户（用户名/昵称模糊匹配）
+      parameters:
+      - description: 搜索关键词
+        in: query
+        name: keyword
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功
+          schema:
+            allOf:
+            - $ref: '#/definitions/types.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/model.User'
+                  type: array
+              type: object
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/types.Response'
+      security:
+      - BearerAuth: []
+      summary: 搜索用户
+      tags:
+      - 用户
 schemes:
 - http
 securityDefinitions:
