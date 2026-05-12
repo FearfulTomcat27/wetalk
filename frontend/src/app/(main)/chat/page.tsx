@@ -200,7 +200,7 @@ export default function ChatPage() {
       unsubFriendReq();
       wsClient.disconnect();
     };
-  }, [userFetched, token, receiveMessage, updateMessageStatus, setConnected]);
+  }, [userFetched, token, receiveMessage, updateMessageStatus, setConnected, incrementPendingRequests]);
 
   function handleSelectContact(id: number) {
     selectContact(id);

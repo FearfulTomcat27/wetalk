@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/Users/yuyong/personal_proj/wetalk/.claude/format-on-edit.sh"
+            "command": "bash /Users/yuyong/personal_proj/wetalk/.claude/format-on-edit.sh"
           }
         ]
       }

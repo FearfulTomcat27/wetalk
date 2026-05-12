@@ -195,7 +195,7 @@ export default function ContactsPage() {
       unsub();
       wsClient.disconnect();
     };
-  }, [userFetched, token]);
+  }, [userFetched, token, incrementPendingRequests]);
 
   // 拖拽处理
   const handleMouseDown = useCallback((e: ReactMouseEvent) => {
