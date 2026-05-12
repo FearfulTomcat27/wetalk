@@ -11,6 +11,7 @@ type Config struct {
 	JWT      JWTConfig      `mapstructure:"jwt"`
 	Redis    RedisConfig    `mapstructure:"redis"`
 	OSS      OSSConfig      `mapstructure:"oss"`
+	Mongo    MongoConfig    `mapstructure:"mongo"`
 }
 
 // LoggerConfig 日志配置
@@ -54,6 +55,12 @@ type OSSConfig struct {
 	Region          string `mapstructure:"region"`
 	AccessKeyID     string `mapstructure:"access_key_id"`
 	AccessKeySecret string `mapstructure:"access_key_secret"`
+}
+
+// MongoConfig MongoDB 配置
+type MongoConfig struct {
+	URI      string `mapstructure:"uri"`
+	Database string `mapstructure:"database"`
 }
 
 // Load 从文件加载配置，支持环境变量覆盖 (WETALK_ 前缀)

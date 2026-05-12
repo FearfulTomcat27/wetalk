@@ -43,6 +43,7 @@ export const Avatar = forwardRef<HTMLDivElement, AvatarProps>(
             src={avatarSrc}
             alt={alt || ""}
             fill
+            sizes={`${size}px`}
             unoptimized={isDiceBear}
             onError={() => setError(true)}
             className="pointer-events-none object-cover"

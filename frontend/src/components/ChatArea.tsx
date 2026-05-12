@@ -171,7 +171,15 @@ function formatTime(ts: string | number): string {
   sunday.setHours(23, 59, 59, 999);
 
   if (date >= monday && date <= sunday) {
-    // 昨天优先
+    // 今天只显示时间
+    if (
+      date.getFullYear() === now.getFullYear() &&
+      date.getMonth() === now.getMonth() &&
+      date.getDate() === now.getDate()
+    ) {
+      return timeStr;
+    }
+    // 昨天
     const yesterday = new Date(now);
     yesterday.setDate(now.getDate() - 1);
     if (
@@ -356,14 +364,14 @@ export function ChatArea({ messages, currentUserId, contactName, contactUsername
                     <div>
                       <div
                         className="relative overflow-hidden rounded-md cursor-pointer shadow-md"
-                        style={{ maxWidth: 200 }}
+                        style={{ width: 200, height: 150 }}
                         onClick={() => setPreviewImage(msg.content)}
                       >
                         <Image
                           src={msg.content}
                           alt="图片消息"
-                          width={200}
-                          height={150}
+                          fill
+                          sizes="200px"
                           className="object-cover"
                           unoptimized={msg.content.includes("oss-cn-shanghai")}
                         />

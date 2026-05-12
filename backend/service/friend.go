@@ -4,20 +4,26 @@ import (
 	"fmt"
 	"time"
 
-	"wetalk/common"
-	"wetalk/dto"
 	"wetalk/model"
 	"wetalk/types"
 )
 
 // FriendService 好友业务逻辑
 type FriendService struct {
-	chatSvc *ChatService
+	friendRepo FriendRepository
+	userRepo   UserRepository
+	chatSvc    *ChatService
+	cache      Cache
 }
 
 // NewFriendService 创建好友服务
-func NewFriendService(chatSvc *ChatService) *FriendService {
-	return &FriendService{chatSvc: chatSvc}
+func NewFriendService(friendRepo FriendRepository, userRepo UserRepository, chatSvc *ChatService, cache Cache) *FriendService {
+	return &FriendService{
+		friendRepo: friendRepo,
+		userRepo:   userRepo,
+		chatSvc:    chatSvc,
+		cache:      cache,
+	}
 }
 
 // AddFriendResult 添加好友结果（含请求记录和发送者信息）
@@ -35,9 +41,9 @@ func friendshipCacheKeys(userID int64) []string {
 }
 
 // invalidateFriendshipCache 使两个用户的好友列表缓存失效
-func invalidateFriendshipCache(userID, friendID int64) {
+func (s *FriendService) invalidateFriendshipCache(userID, friendID int64) {
 	keys := append(friendshipCacheKeys(userID), friendshipCacheKeys(friendID)...)
-	_ = common.CacheDel(keys...)
+	_ = s.cache.Del(keys...)
 }
 
 // AddFriend 发送好友请求
@@ -47,7 +53,7 @@ func (s *FriendService) AddFriend(userID int64, req model.AddFriendRequest) (*Ad
 	}
 
 	// 检查是否已经是好友
-	friendship, err := dto.Friend.FindFriendshipBetween(userID, req.FriendID)
+	friendship, err := s.friendRepo.FindFriendshipBetween(userID, req.FriendID)
 	if err != nil {
 		return nil, err
 	}
@@ -56,7 +62,7 @@ func (s *FriendService) AddFriend(userID int64, req model.AddFriendRequest) (*Ad
 	}
 
 	// 检查是否已存在任意方向的好友请求
-	existing, err := dto.Friend.FindRequestBetween(userID, req.FriendID)
+	existing, err := s.friendRepo.FindRequestBetween(userID, req.FriendID)
 	if err != nil {
 		return nil, err
 	}
@@ -64,13 +70,13 @@ func (s *FriendService) AddFriend(userID int64, req model.AddFriendRequest) (*Ad
 		return nil, types.ErrFriendRequestExists
 	}
 
-	fr, err := dto.Friend.Create(userID, req.FriendID)
+	fr, err := s.friendRepo.Create(userID, req.FriendID)
 	if err != nil {
 		return nil, err
 	}
 
 	// 获取发送者信息
-	user, err := dto.User.FindByID(userID)
+	user, err := s.userRepo.FindByID(userID)
 	if err != nil {
 		return nil, err
 	}
@@ -89,7 +95,7 @@ func (s *FriendService) AddFriend(userID int64, req model.AddFriendRequest) (*Ad
 
 // AcceptFriend 接受好友请求（同时写入 friendships 表 + 创建单聊）
 func (s *FriendService) AcceptFriend(userID int64, friendReqID int64) error {
-	f, err := dto.Friend.FindByID(friendReqID)
+	f, err := s.friendRepo.FindByID(friendReqID)
 	if err != nil {
 		return err
 	}
@@ -104,7 +110,7 @@ func (s *FriendService) AcceptFriend(userID int64, friendReqID int64) error {
 		return types.ErrRequestAlreadyHandled
 	}
 
-	if err := dto.Friend.UpdateStatus(friendReqID, model.FriendStatusAccepted); err != nil {
+	if err := s.friendRepo.UpdateStatus(friendReqID, model.FriendStatusAccepted); err != nil {
 		return err
 	}
 
@@ -115,13 +121,13 @@ func (s *FriendService) AcceptFriend(userID int64, friendReqID int64) error {
 	}
 
 	// 再写入 friendships（含 chat_id，FirstOrCreate 防重）
-	_, err = dto.Friend.CreateFriendship(f.UserID, f.FriendID, chat.ID)
+	_, err = s.friendRepo.CreateFriendship(f.UserID, f.FriendID, chat.ID)
 	if err != nil {
 		return err
 	}
 
 	// 异步使双方好友列表缓存失效
-	go invalidateFriendshipCache(f.UserID, f.FriendID)
+	go s.invalidateFriendshipCache(f.UserID, f.FriendID)
 	return nil
 }
 
@@ -134,12 +140,12 @@ func (s *FriendService) ListFriends(userID int64, chatOnly ...bool) ([]model.Fri
 	}
 
 	var friends []model.FriendshipInfo
-	if ok, _ := common.CacheGet(key, &friends); ok {
+	if ok, _ := s.cache.Get(key, &friends); ok {
 		return friends, nil
 	}
 
 	var err error
-	friends, err = dto.Friend.FindFriendships(userID, chatOnly...)
+	friends, err = s.friendRepo.FindFriendships(userID, chatOnly...)
 	if err != nil {
 		return nil, err
 	}
@@ -147,8 +153,7 @@ func (s *FriendService) ListFriends(userID int64, chatOnly ...bool) ([]model.Fri
 		friends = []model.FriendshipInfo{}
 	}
 
-	if cacheErr := common.CacheSet(key, friends, 5*time.Minute); cacheErr != nil {
-		// 非关键路径，静默忽略
+	if cacheErr := s.cache.Set(key, friends, 5*time.Minute); cacheErr != nil {
 		_ = cacheErr
 	}
 	return friends, nil
@@ -156,7 +161,7 @@ func (s *FriendService) ListFriends(userID int64, chatOnly ...bool) ([]model.Fri
 
 // GetPendingRequests 获取待处理好友请求
 func (s *FriendService) GetPendingRequests(userID int64) ([]model.PendingRequest, error) {
-	requests, err := dto.Friend.FindPendingByUserID(userID)
+	requests, err := s.friendRepo.FindPendingByUserID(userID)
 	if err != nil {
 		return nil, err
 	}
@@ -168,7 +173,7 @@ func (s *FriendService) GetPendingRequests(userID int64) ([]model.PendingRequest
 
 // DeleteFriend 删除好友（同时删除 friend_requests 请求记录和 friendships 关系）
 func (s *FriendService) DeleteFriend(userID int64, friendReqID int64) error {
-	f, err := dto.Friend.FindByID(friendReqID)
+	f, err := s.friendRepo.FindByID(friendReqID)
 	if err != nil {
 		return err
 	}
@@ -181,16 +186,16 @@ func (s *FriendService) DeleteFriend(userID int64, friendReqID int64) error {
 	}
 
 	// 删除 friendships 表中的关系
-	if err := dto.Friend.DeleteFriendship(f.UserID, f.FriendID); err != nil {
+	if err := s.friendRepo.DeleteFriendship(f.UserID, f.FriendID); err != nil {
 		return err
 	}
 
 	// 删除 friend_requests 表中的请求记录
-	if err := dto.Friend.Delete(friendReqID); err != nil {
+	if err := s.friendRepo.Delete(friendReqID); err != nil {
 		return err
 	}
 
 	// 异步使双方好友列表缓存失效
-	go invalidateFriendshipCache(f.UserID, f.FriendID)
+	go s.invalidateFriendshipCache(f.UserID, f.FriendID)
 	return nil
 }

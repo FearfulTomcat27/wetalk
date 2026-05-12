@@ -7,8 +7,11 @@
 package main
 
 import (
+	"wetalk/common"
 	"wetalk/config"
+	"wetalk/controller"
 	"wetalk/router"
+	"wetalk/service"
 )
 
 // Injectors from wire.go:
@@ -20,11 +23,33 @@ func BuildDependencies(cfgPath string) (*router.Dependencies, error) {
 		return nil, err
 	}
 	hub := NewHub()
-	client := NewOSSClient(configConfig)
+	ossConfig := ProvideOSSConfig(configConfig)
+	client := common.NewClient(ossConfig)
+	userRepository := ProvideUserRepository()
+	cache := ProvideCache()
+	jwtConfig := ProvideJWTConfig(configConfig)
+	objectStorage := ProvideObjectStorage(client)
+	userService := service.NewUserService(userRepository, cache, jwtConfig, objectStorage)
+	userHandler := controller.NewUserHandler(userService)
+	friendRepository := ProvideFriendRepository()
+	chatRepository := ProvideChatRepository()
+	chatService := service.NewChatService(chatRepository, cache)
+	friendService := service.NewFriendService(friendRepository, userRepository, chatService, cache)
+	friendHandler := controller.NewFriendHandler(friendService, hub)
+	messageRepository := ProvideMessageRepository()
+	messageService := service.NewMessageService(messageRepository, chatService, cache)
+	messageHandler := controller.NewMessageHandler(messageService, chatService, hub)
+	uploadService := service.NewUploadService(objectStorage)
+	uploadHandler := controller.NewUploadHandler(uploadService)
 	dependencies := &router.Dependencies{
-		Config:    configConfig,
-		Hub:       hub,
-		OSSClient: client,
+		Config:         configConfig,
+		Hub:            hub,
+		OSSClient:      client,
+		UserHandler:    userHandler,
+		FriendHandler:  friendHandler,
+		MessageHandler: messageHandler,
+		UploadHandler:  uploadHandler,
+		ChatService:    chatService,
 	}
 	return dependencies, nil
 }

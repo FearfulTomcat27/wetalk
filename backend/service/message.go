@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"time"
 
-	"wetalk/common"
 	"wetalk/dto"
 	"wetalk/model"
 	"wetalk/types"
@@ -13,12 +12,18 @@ import (
 
 // MessageService 消息业务逻辑
 type MessageService struct {
+	msgRepo MessageRepository
 	chatSvc *ChatService
+	cache   Cache
 }
 
 // NewMessageService 创建消息服务
-func NewMessageService(chatSvc *ChatService) *MessageService {
-	return &MessageService{chatSvc: chatSvc}
+func NewMessageService(msgRepo MessageRepository, chatSvc *ChatService, cache Cache) *MessageService {
+	return &MessageService{
+		msgRepo: msgRepo,
+		chatSvc: chatSvc,
+		cache:   cache,
+	}
 }
 
 // SendMessage 发送消息
@@ -38,7 +43,7 @@ func (s *MessageService) SendMessage(senderID int64, req model.SendMessageReques
 
 	// 如果设置了 quoted_message_id，验证引用的消息存在且属于同一聊天
 	if req.QuoteMessageID != nil {
-		quoted, err := dto.Message.GetByID(*req.QuoteMessageID)
+		quoted, err := s.msgRepo.GetByID(*req.QuoteMessageID)
 		if err != nil {
 			return nil, err
 		}
@@ -53,7 +58,7 @@ func (s *MessageService) SendMessage(senderID int64, req model.SendMessageReques
 	}
 
 	// 创建消息（MongoDB，含嵌入式 file_metadata 和引用消息内容预填充）
-	msgResp, err := dto.Message.Create(senderID, req.ChatID, req.Content, contentType, req.QuoteMessageID, req.FileMetadata)
+	msgResp, err := s.msgRepo.Create(senderID, req.ChatID, req.Content, contentType, req.QuoteMessageID, req.FileMetadata)
 	if err != nil {
 		return nil, err
 	}
@@ -68,11 +73,13 @@ func (s *MessageService) SendMessage(senderID int64, req model.SendMessageReques
 
 // MarkAsRead 标记消息已读
 func (s *MessageService) MarkAsRead(userID, chatID int64) error {
-	err := dto.Message.MarkAsRead(chatID, userID)
+	err := s.msgRepo.MarkAsRead(chatID, userID)
 	if err != nil {
 		return err
 	}
-	go func() { _ = common.CacheDel(fmt.Sprintf("unread:%d", userID)) }()
+	if delErr := s.cache.Del(fmt.Sprintf("unread:%d", userID)); delErr != nil {
+		_ = delErr
+	}
 	return nil
 }
 
@@ -80,12 +87,12 @@ func (s *MessageService) MarkAsRead(userID, chatID int64) error {
 func (s *MessageService) GetUnreadCounts(userID int64) ([]dto.UnreadCount, error) {
 	key := fmt.Sprintf("unread:%d", userID)
 	var counts []dto.UnreadCount
-	if ok, _ := common.CacheGet(key, &counts); ok {
+	if ok, _ := s.cache.Get(key, &counts); ok {
 		return counts, nil
 	}
 
 	var err error
-	counts, err = dto.Message.GetUnreadCounts(userID)
+	counts, err = s.msgRepo.GetUnreadCounts(userID)
 	if err != nil {
 		return nil, err
 	}
@@ -93,7 +100,7 @@ func (s *MessageService) GetUnreadCounts(userID int64) ([]dto.UnreadCount, error
 		counts = []dto.UnreadCount{}
 	}
 
-	if cacheErr := common.CacheSet(key, counts, 20*time.Second); cacheErr != nil {
+	if cacheErr := s.cache.Set(key, counts, 20*time.Second); cacheErr != nil {
 		_ = cacheErr
 	}
 	return counts, nil
@@ -106,7 +113,7 @@ func (s *MessageService) GetConversation(chatID int64, offset, limit int) ([]mod
 		limit = 50
 	}
 
-	responses, err := dto.Message.ListByChat(chatID, offset, limit)
+	responses, err := s.msgRepo.ListByChat(chatID, offset, limit)
 	if err != nil {
 		return nil, err
 	}

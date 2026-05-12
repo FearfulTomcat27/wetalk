@@ -18,13 +18,25 @@ type UploadHandler struct {
 }
 
 // NewUploadHandler 创建上传处理器
-func NewUploadHandler(ossClient *common.Client) *UploadHandler {
+func NewUploadHandler(svc *service.UploadService) *UploadHandler {
 	return &UploadHandler{
-		svc: service.NewUploadService(ossClient),
+		svc: svc,
 	}
 }
 
 // Upload 上传文件/图片到 OSS
+// @Summary 上传文件
+// @Description 上传图片或文件到阿里云 OSS，图片最大 10MB，文件最大 20MB
+// @Tags 上传
+// @Accept multipart/form-data
+// @Produce json
+// @Security BearerAuth
+// @Param type formData string true "上传类型 (image/file)"
+// @Param file formData file true "上传文件"
+// @Success 200 {object} types.Response{data=model.UploadResponse} "上传成功"
+// @Failure 400 {object} types.Response "参数错误或类型错误或文件过大"
+// @Failure 401 {object} types.Response "未认证"
+// @Router /api/upload [post]
 func (h *UploadHandler) Upload(c *gin.Context) {
 	userID := c.GetInt64("user_id")
 

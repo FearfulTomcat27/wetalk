@@ -21,14 +21,26 @@ type FriendHandler struct {
 }
 
 // NewFriendHandler 创建好友处理器
-func NewFriendHandler(hub *ws.Hub) *FriendHandler {
+func NewFriendHandler(svc *service.FriendService, hub *ws.Hub) *FriendHandler {
 	return &FriendHandler{
-		svc: service.NewFriendService(service.NewChatService()),
+		svc: svc,
 		hub: hub,
 	}
 }
 
 // Add 添加好友
+// @Summary 发送好友请求
+// @Description 向指定用户发送好友请求，并通过 WebSocket 实时推送给接收方
+// @Tags 好友
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body model.AddFriendRequest true "好友请求"
+// @Success 201 {object} types.Response{data=model.FriendRequest} "好友请求已发送"
+// @Failure 400 {object} types.Response "参数错误或不能添加自己"
+// @Failure 401 {object} types.Response "未认证"
+// @Failure 409 {object} types.Response "请求已存在"
+// @Router /api/friends [post]
 func (h *FriendHandler) Add(c *gin.Context) {
 	userID := c.GetInt64("user_id")
 
@@ -64,6 +76,15 @@ func (h *FriendHandler) Add(c *gin.Context) {
 }
 
 // List 好友列表
+// @Summary 获取好友列表
+// @Description 获取当前用户的好友列表，可选仅显示有聊天的好友
+// @Tags 好友
+// @Produce json
+// @Security BearerAuth
+// @Param chatted query int false "是否仅显示有聊天的好友 (1=是)"
+// @Success 200 {object} types.Response{data=[]model.FriendshipInfo} "成功"
+// @Failure 401 {object} types.Response "未认证"
+// @Router /api/friends [get]
 func (h *FriendHandler) List(c *gin.Context) {
 	userID := c.GetInt64("user_id")
 
@@ -84,6 +105,17 @@ func (h *FriendHandler) List(c *gin.Context) {
 }
 
 // Accept 接受好友请求
+// @Summary 接受好友请求
+// @Description 接受一个待处理的好友请求，建立好友关系并创建聊天会话
+// @Tags 好友
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "好友请求 ID"
+// @Success 200 {object} types.Response "已接受好友请求"
+// @Failure 400 {object} types.Response "参数错误"
+// @Failure 401 {object} types.Response "未认证"
+// @Failure 403 {object} types.Response "无权操作"
+// @Router /api/friends/{id}/accept [put]
 func (h *FriendHandler) Accept(c *gin.Context) {
 	userID := c.GetInt64("user_id")
 
@@ -108,6 +140,14 @@ func (h *FriendHandler) Accept(c *gin.Context) {
 }
 
 // PendingRequests 获取待处理的好友请求
+// @Summary 获取待处理的好友请求
+// @Description 获取当前用户收到的待处理好友请求列表
+// @Tags 好友
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} types.Response{data=[]model.PendingRequest} "成功"
+// @Failure 401 {object} types.Response "未认证"
+// @Router /api/friends/pending [get]
 func (h *FriendHandler) PendingRequests(c *gin.Context) {
 	userID := c.GetInt64("user_id")
 
@@ -121,6 +161,17 @@ func (h *FriendHandler) PendingRequests(c *gin.Context) {
 }
 
 // Delete 删除好友
+// @Summary 删除好友
+// @Description 删除与指定用户的好友关系
+// @Tags 好友
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "好友 ID"
+// @Success 200 {object} types.Response "已删除好友"
+// @Failure 400 {object} types.Response "参数错误"
+// @Failure 401 {object} types.Response "未认证"
+// @Failure 404 {object} types.Response "好友关系不存在"
+// @Router /api/friends/{id} [delete]
 func (h *FriendHandler) Delete(c *gin.Context) {
 	userID := c.GetInt64("user_id")
 

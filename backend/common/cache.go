@@ -54,3 +54,14 @@ func CacheDel(keys ...string) error {
 	}
 	return db.RedisClient.Del(context.Background(), prefixed...).Err()
 }
+
+// RedisCache 是 Cache 接口的生产环境实现，通过委托包级函数完成操作
+type RedisCache struct{}
+
+func (c *RedisCache) Get(key string, dest interface{}) (bool, error) { return CacheGet(key, dest) }
+
+func (c *RedisCache) Set(key string, value interface{}, ttl time.Duration) error {
+	return CacheSet(key, value, ttl)
+}
+
+func (c *RedisCache) Del(keys ...string) error { return CacheDel(keys...) }
