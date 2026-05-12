@@ -82,7 +82,7 @@ func TestMain(m *testing.M) {
 	// 初始化数据库连接
 	fmt.Printf("MySQL: %s:%d, Redis: %s:%d, Mongo: %s\n", mysqlHost, mysqlPort, redisHost, redisPort, mongoURI)
 
-		// MySQL
+	// MySQL
 	if err := db.Init(config.DatabaseConfig{
 		Host:         mysqlHost,
 		Port:         mysqlPort,
