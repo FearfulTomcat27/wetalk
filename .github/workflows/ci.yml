@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/**"
+      - "backend/**"
+      - "frontend/**"
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/**"
+      - "backend/**"
+      - "frontend/**"
+
+env:
+  GO_VERSION: "1.26"
+  NODE_VERSION: "22"
+
+permissions:
+  contents: read
+
+jobs:
+  lint-backend:
+    name: Lint Backend (gofumpt)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Install gofumpt
+        run: go install mvdan.cc/gofumpt@latest
+
+      - name: Check formatting
+        working-directory: backend
+        run: |
+          if [ -n "$(gofumpt -d .)" ]; then
+            echo "❌ 后端代码未通过 gofumpt 格式化检查："
+            gofumpt -d .
+            exit 1
+          fi
+          echo "✅ 后端代码格式正确"
+
+  lint-frontend:
+    name: Lint Frontend (ESLint)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "pnpm"
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Run ESLint
+        working-directory: frontend
+        run: pnpm lint
