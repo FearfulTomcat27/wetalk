@@ -246,8 +246,8 @@ func (m *MockMessageRepo) GetByID(msgID int64) (*model.Message, error) {
 	return args.Get(0).(*model.Message), args.Error(1)
 }
 
-func (m *MockMessageRepo) ListByChat(chatID int64, offset, limit int) ([]model.MessageResponse, error) {
-	args := m.Called(chatID, offset, limit)
+func (m *MockMessageRepo) ListByChat(chatID int64, userID int64, offset, limit int) ([]model.MessageResponse, error) {
+	args := m.Called(chatID, userID, offset, limit)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}

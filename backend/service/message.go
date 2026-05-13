@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"wetalk/common"
 	"wetalk/dto"
 	"wetalk/model"
 	"wetalk/types"
@@ -71,6 +72,61 @@ func (s *MessageService) SendMessage(senderID int64, req model.SendMessageReques
 	return msgResp, nil
 }
 
+// DeleteChatHistory 当前用户删除某个聊天的聊天记录（记录删除时间戳）
+func (s *MessageService) DeleteChatHistory(userID, chatID int64) error {
+	// 验证用户是聊天成员
+	isMember, err := s.chatSvc.IsMember(chatID, userID)
+	if err != nil {
+		return err
+	}
+	if !isMember {
+		return types.ErrNotChatMember
+	}
+
+	if err := dto.Message.RecordChatDeletion(userID, chatID); err != nil {
+		return err
+	}
+
+	// 清除未读缓存和好友列表缓存
+	go func() {
+		_ = common.CacheDel(fmt.Sprintf("unread:%d", userID))
+		_ = common.CacheDel(fmt.Sprintf("friendships:%d", userID), fmt.Sprintf("friendships:%d:chatted", userID))
+	}()
+
+	// 检查对方是否也删除过，双方都删除时清理物理消息
+	go func() {
+		members, err := s.chatSvc.GetMemberIDs(chatID)
+		if err != nil || len(members) != 2 {
+			return
+		}
+		var otherUserID int64
+		if members[0] == userID {
+			otherUserID = members[1]
+		} else {
+			otherUserID = members[0]
+		}
+
+		otherDeleted, err := dto.Message.GetChatDeletion(otherUserID, chatID)
+		if err != nil || otherDeleted == nil {
+			return // 对方未删除，还不能清理
+		}
+
+		myDeleted, err := dto.Message.GetChatDeletion(userID, chatID)
+		if err != nil || myDeleted == nil {
+			return
+		}
+
+		// 以较早的删除时间为 cutoff
+		cutoff := *myDeleted
+		if otherDeleted.Before(*myDeleted) {
+			cutoff = *otherDeleted
+		}
+		_ = dto.Message.CleanupDeletedMessages(chatID, cutoff)
+	}()
+
+	return nil
+}
+
 // MarkAsRead 标记消息已读
 func (s *MessageService) MarkAsRead(userID, chatID int64) error {
 	err := s.msgRepo.MarkAsRead(chatID, userID)
@@ -108,12 +164,13 @@ func (s *MessageService) GetUnreadCounts(userID int64) ([]dto.UnreadCount, error
 
 // GetConversation 获取聊天记录
 // MongoDB 文档自带嵌入式 file_metadata，无需额外查询
-func (s *MessageService) GetConversation(chatID int64, offset, limit int) ([]model.MessageResponse, error) {
+// userID 用于过滤该用户已删除的聊天记录
+func (s *MessageService) GetConversation(chatID, userID int64, offset, limit int) ([]model.MessageResponse, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 50
 	}
 
-	responses, err := s.msgRepo.ListByChat(chatID, offset, limit)
+	responses, err := s.msgRepo.ListByChat(chatID, userID, offset, limit)
 	if err != nil {
 		return nil, err
 	}

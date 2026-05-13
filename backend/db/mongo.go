@@ -68,6 +68,11 @@ func MsgCollection() *mongo.Collection {
 	return MongoDB.Collection("messages")
 }
 
+// ChatDeletionCollection 获取聊天删除记录集合
+func ChatDeletionCollection() *mongo.Collection {
+	return MongoDB.Collection("chat_deletions")
+}
+
 // CountersCollection 获取计数器集合（用于 msg_id 自增）
 func CountersCollection() *mongo.Collection {
 	return MongoDB.Collection("counters")
@@ -109,6 +114,18 @@ func EnsureIndexes() error {
 		Options: options.Index().SetUnique(true),
 	}); err != nil {
 		return fmt.Errorf("创建 idx_msg_id 索引失败: %w", err)
+	}
+
+	// chat_deletions 集合索引（user_id + chat_id 唯一）
+	delCol := ChatDeletionCollection()
+	if _, err := delCol.Indexes().CreateOne(ctx, mongo.IndexModel{
+		Keys: bson.D{
+			{Key: "user_id", Value: 1},
+			{Key: "chat_id", Value: 1},
+		},
+		Options: options.Index().SetUnique(true),
+	}); err != nil {
+		return fmt.Errorf("创建 idx_chat_deletions 索引失败: %w", err)
 	}
 
 	return nil

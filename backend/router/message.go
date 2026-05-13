@@ -13,6 +13,7 @@ func registerMessageRoutes(api *gin.RouterGroup, h *controller.MessageHandler) {
 		messages.GET("", h.List)
 		messages.GET("/unread", h.Unread)
 		messages.PUT("/read", h.Read)
+		messages.DELETE("/history/:chat_id", h.DeleteHistory)
 	}
 }
 

@@ -32,7 +32,7 @@ func TestServiceMessage_SendAndGetConversation(t *testing.T) {
 	assert.Equal(t, model.ContentTypeText, resp.ContentType)
 
 	// Get conversation
-	msgs, err := msgSvc.GetConversation(chat.ID, 0, 10)
+	msgs, err := msgSvc.GetConversation(chat.ID, alice.ID, 0, 10)
 	require.NoError(t, err)
 	assert.Len(t, msgs, 1)
 }
@@ -174,12 +174,12 @@ func TestServiceMessage_GetConversation_Pagination(t *testing.T) {
 	}
 
 	// Get page 1 (limit 3) — newest first
-	msgs, err := msgSvc.GetConversation(chat.ID, 0, 3)
+	msgs, err := msgSvc.GetConversation(chat.ID, alice.ID, 0, 3)
 	require.NoError(t, err)
 	assert.Len(t, msgs, 3)
 
 	// Get page 2
-	msgs2, err := msgSvc.GetConversation(chat.ID, 3, 3)
+	msgs2, err := msgSvc.GetConversation(chat.ID, alice.ID, 3, 3)
 	require.NoError(t, err)
 	assert.Len(t, msgs2, 3)
 

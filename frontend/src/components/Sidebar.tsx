@@ -19,7 +19,11 @@ export function Sidebar() {
   const isContactsActive = pathname === "/contacts";
   const pendingRequestsCount = useChatStore((s) => s.pendingRequestsCount);
   const unreadCounts = useChatStore((s) => s.unreadCounts);
-  const totalUnread = Object.values(unreadCounts).reduce((sum, c) => sum + c, 0);
+  const contacts = useChatStore((s) => s.contacts);
+  const totalUnread = contacts.reduce(
+    (sum, c) => sum + (c.chat_id ? (unreadCounts[c.chat_id] ?? 0) : 0),
+    0,
+  );
 
   function handleLogout() {
     logout();

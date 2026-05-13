@@ -162,6 +162,30 @@ func (h *MessageHandler) Unread(c *gin.Context) {
 	common.Success(c, http.StatusOK, "成功", counts)
 }
 
+// DeleteHistory 当前用户删除某个聊天的聊天记录
+func (h *MessageHandler) DeleteHistory(c *gin.Context) {
+	userID := c.GetInt64("user_id")
+
+	chatIDStr := c.Param("chat_id")
+	chatID, err := strconv.ParseInt(chatIDStr, 10, 64)
+	if err != nil || chatID == 0 {
+		common.AppError(c, types.NewInvalidParamf("无效的 chat_id"))
+		return
+	}
+
+	if err := h.svc.DeleteChatHistory(userID, chatID); err != nil {
+		var appErr *types.AppError
+		if errors.As(err, &appErr) {
+			common.AppError(c, appErr)
+			return
+		}
+		common.Error(c, http.StatusInternalServerError, "删除聊天记录失败")
+		return
+	}
+
+	common.Success(c, http.StatusOK, "聊天记录已删除", nil)
+}
+
 // List 获取聊天记录
 // @Summary 获取聊天记录
 // @Description 获取指定聊天的历史消息记录（按时间倒序，支持分页）
@@ -176,6 +200,7 @@ func (h *MessageHandler) Unread(c *gin.Context) {
 // @Failure 401 {object} types.Response "未认证"
 // @Router /api/messages [get]
 func (h *MessageHandler) List(c *gin.Context) {
+	userID := c.GetInt64("user_id")
 	chatIDStr := c.Query("chat_id")
 	chatID, err := strconv.ParseInt(chatIDStr, 10, 64)
 	if err != nil || chatID == 0 {
@@ -186,7 +211,7 @@ func (h *MessageHandler) List(c *gin.Context) {
 	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
 
-	messages, err := h.svc.GetConversation(chatID, offset, limit)
+	messages, err := h.svc.GetConversation(chatID, userID, offset, limit)
 	if err != nil {
 		common.Error(c, http.StatusInternalServerError, "获取消息失败")
 		return
