@@ -69,6 +69,17 @@ func (s *MessageService) SendMessage(senderID int64, req model.SendMessageReques
 		_ = updateErr
 	}
 
+	// 清除好友列表缓存，使前端下次 getFriends 能拿到最新的 last_message
+	go func() {
+		members, err := s.chatSvc.GetMemberIDs(req.ChatID)
+		if err != nil {
+			return
+		}
+		for _, memberID := range members {
+			_ = common.CacheDel(fmt.Sprintf("friendships:%d", memberID), fmt.Sprintf("friendships:%d:chatted", memberID))
+		}
+	}()
+
 	return msgResp, nil
 }
 

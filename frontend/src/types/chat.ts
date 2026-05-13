@@ -10,6 +10,8 @@ export interface Contact {
   unread: number;
 }
 
+export type MessageStatus = "sending" | "sent" | "delivered" | "read" | "failed";
+
 /** 匹配后端 JSON: { id, chat_id, sender_id, content, content_type, status, created_at } */
 export interface Message {
   id: number;
@@ -17,7 +19,7 @@ export interface Message {
   sender_id: number;
   content: string;
   content_type?: string;
-  status?: string;
+  status: MessageStatus;
   created_at: string; // ISO 8601
   /** 乐观 UI 匹配：发送时生成，收到 message.sent 后用于替换临时消息 */
   client_msg_id?: string;
