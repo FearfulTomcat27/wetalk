@@ -47,6 +47,8 @@ interface ChatState {
   unreadCounts: Record<number, number>;
   /** client_msg_id → 超时定时器 ID（WS 发送超时用） */
   pendingTimeouts: Record<string, ReturnType<typeof setTimeout>>;
+  /** client_msg_id → 处于 sending 状态的消息（用于持久化队列，避免全量遍历） */
+  sendingMessages: Record<string, Message>;
 
   setContacts: (contacts: Contact[]) => void;
   selectContact: (id: number) => void;
@@ -84,6 +86,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   pendingRequestsCount: 0,
   unreadCounts: {},
   pendingTimeouts: {},
+  sendingMessages: {},
 
   setContacts: (contacts: Contact[]) => {
     set({ contacts });
@@ -163,6 +166,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       ),
       inputTexts: { ...state.inputTexts, [activeContactId]: "" },
       quotedMessages: { ...state.quotedMessages, [String(activeContactId)]: null },
+      sendingMessages: { ...state.sendingMessages, [clientMsgId]: tempMsg },
     }));
 
     // 持久化发送队列
@@ -244,6 +248,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         c.id === activeContactId ? { ...c, lastMessage: lastMsgLabel, lastMessageTime: new Date().toISOString() } : c
       ),
       quotedMessages: { ...state.quotedMessages, [String(activeContactId)]: null },
+      sendingMessages: { ...state.sendingMessages, [clientMsgId]: tempMsg },
     }));
 
     // 持久化发送队列
@@ -315,26 +320,37 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   loadMessages: (chatId: number, msgs: Message[]) => {
+    const normalized = msgs.map((m) => (m.status ? m : { ...m, status: "sent" as MessageStatus }));
     set((state) => ({
-      messages: { ...state.messages, [chatId]: msgs },
+      messages: { ...state.messages, [chatId]: normalized },
     }));
   },
 
   receiveMessage: (msg: Message) => {
-    // 忽略自己发出的消息（确认通过 message.sent 或 HTTP 响应处理）
+    // 确保消息有默认 status（后端可能不返回）
+    const normalized = msg.status ? msg : { ...msg, status: "sent" as MessageStatus };
+
+    // 如果这条消息是本标签页发出的（client_msg_id 已存在于消息列表中），跳过
+    // 因为本标签页的消息确认通过 message.sent 处理
+    // 另一个标签页发出的自身消息（client_msg_id 不在列表中）正常接收
     const currentUserId = useAuthStore.getState().user?.id;
-    if (msg.sender_id === currentUserId) {
-      return;
+    if (normalized.client_msg_id && normalized.sender_id === currentUserId) {
+      const allMsgs = get().messages;
+      for (const msgs of Object.values(allMsgs)) {
+        if (msgs.some((m) => m.client_msg_id === normalized.client_msg_id)) {
+          return; // 本标签页发出的消息，已存在，跳过
+        }
+      }
     }
 
     set((state) => {
-      const contact = state.contacts.find((c) => c.chat_id === msg.chat_id);
+      const contact = state.contacts.find((c) => c.chat_id === normalized.chat_id);
       if (!contact) {
         return state;
       }
 
-      const existing = state.messages[msg.chat_id] || [];
-      if (existing.some((m) => m.id === msg.id)) {
+      const existing = state.messages[normalized.chat_id] || [];
+      if (existing.some((m) => m.id === normalized.id)) {
         return state;
       }
 
@@ -344,24 +360,24 @@ export const useChatStore = create<ChatState>((set, get) => ({
       if (state.activeContactId !== null) {
         const activeContact = state.contacts.find((c) => c.id === state.activeContactId);
         if (activeContact !== undefined) {
-          isActive = activeContact.chat_id === msg.chat_id;
+          isActive = activeContact.chat_id === normalized.chat_id;
         }
       }
 
-      const lastMsgLabel = formatMessagePreview(msg.content, msg.content_type);
+      const lastMsgLabel = formatMessagePreview(normalized.content, normalized.content_type);
       return {
         messages: {
           ...state.messages,
-          [msg.chat_id]: [...existing, msg],
+          [normalized.chat_id]: [...existing, normalized],
         },
         contacts: state.contacts.map((c) =>
-          c.chat_id === msg.chat_id
-            ? { ...c, lastMessage: lastMsgLabel, lastMessageTime: msg.created_at, unread: isActive ? c.unread : c.unread + 1 }
+          c.chat_id === normalized.chat_id
+            ? { ...c, lastMessage: lastMsgLabel, lastMessageTime: normalized.created_at, unread: isActive ? c.unread : c.unread + 1 }
             : c
         ),
         unreadCounts: {
           ...state.unreadCounts,
-          [msg.chat_id]: (state.unreadCounts[msg.chat_id] ?? 0) + (isActive ? 0 : 1),
+          [normalized.chat_id]: (state.unreadCounts[normalized.chat_id] ?? 0) + (isActive ? 0 : 1),
         },
       };
     });
@@ -392,7 +408,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
           newMessages[Number(cid)] = msgs;
         }
       }
-      return { messages: newMessages };
+      const nextSending = { ...state.sendingMessages };
+      delete nextSending[clientMsgId];
+      return { messages: newMessages, sendingMessages: nextSending };
     });
 
     // 发送成功后清理持久化队列
@@ -437,7 +455,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   /** HTTP 发送（带指数退避重试），由 sendMessage/sendMediaMessage/retryMessage 调用 */
   sendViaHttp: (clientMsgId: string, data: SendMessageRequest, retryCount: number) => {
-    const contactId = get().activeContactId;
+    const contact = get().contacts.find((c) => c.chat_id === data.chat_id);
+    const contactId = contact?.id ?? null;
     if (contactId !== null) {
       set((state) => ({
         sending: { ...state.sending, [contactId]: true },
@@ -493,7 +512,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
           newMessages[Number(cid)] = msgs;
         }
       }
-      return { messages: newMessages };
+      const nextSending = { ...state.sendingMessages };
+      delete nextSending[clientMsgId];
+      return { messages: newMessages, sendingMessages: nextSending };
     });
 
     // 失败后清理持久化队列
@@ -508,39 +529,44 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // 重置状态为 sending
     set((state) => {
       const newMessages: Record<number, Message[]> = {};
+      let updatedMsg: Message | undefined;
       for (const [cid, msgs] of Object.entries(state.messages)) {
         const idx = msgs.findIndex((m) => m.client_msg_id === clientMsgId);
         if (idx !== -1) {
+          updatedMsg = { ...msgs[idx], status: "sending" as MessageStatus };
           newMessages[Number(cid)] = [
             ...msgs.slice(0, idx),
-            { ...msgs[idx], status: "sending" as MessageStatus },
+            updatedMsg,
             ...msgs.slice(idx + 1),
           ];
         } else {
           newMessages[Number(cid)] = msgs;
         }
       }
-      return { messages: newMessages };
+      return {
+        messages: newMessages,
+        sendingMessages: updatedMsg
+          ? { ...state.sendingMessages, [clientMsgId]: updatedMsg }
+          : state.sendingMessages,
+      };
     });
 
     const { connected } = get();
+    const fmPayload = msg.file_metadata ? {
+      url: msg.file_metadata.url || msg.content,
+      original_name: msg.file_metadata.original_name || "",
+      file_size: msg.file_metadata.file_size || 0,
+      mime_type: msg.file_metadata.mime_type || "",
+    } : undefined;
+
     const data: SendMessageRequest = {
       chat_id: msg.chat_id,
       content: msg.content,
       content_type: msg.content_type,
       client_msg_id: clientMsgId,
       quoted_message_id: msg.quoted_message_id,
+      file_metadata: fmPayload,
     };
-    if (msg.file_metadata) {
-      data.file_metadata = {
-        url: msg.file_metadata.url || msg.content,
-        original_name: msg.file_metadata.original_name || "",
-        file_size: msg.file_metadata.file_size || 0,
-        mime_type: msg.file_metadata.mime_type || "",
-        width: msg.file_metadata.width,
-        height: msg.file_metadata.height,
-      };
-    }
 
     if (connected) {
       wsClient.send("message.send", {
@@ -549,12 +575,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         content_type: msg.content_type,
         client_msg_id: clientMsgId,
         quoted_message_id: msg.quoted_message_id,
-        file_metadata: msg.file_metadata ? {
-          url: msg.file_metadata.url || msg.content,
-          original_name: msg.file_metadata.original_name || "",
-          file_size: msg.file_metadata.file_size || 0,
-          mime_type: msg.file_metadata.mime_type || "",
-        } : undefined,
+        file_metadata: fmPayload,
       });
 
       const timeoutId = setTimeout(() => {
@@ -580,29 +601,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
     persistPendingQueue(get());
   },
 
-  /** 清除所有待处理的超时定时器（用于清理） */
+  /** 清除所有待处理的超时定时器（用于登出清理） */
   clearAllPendingTimeouts: () => {
     const { pendingTimeouts } = get();
     for (const clientMsgId of Object.keys(pendingTimeouts)) {
       clearTimeout(pendingTimeouts[clientMsgId]);
     }
-    set({ pendingTimeouts: {} });
+    try { localStorage.removeItem(PENDING_QUEUE_KEY); } catch { /* ignore */ }
+    set({ pendingTimeouts: {}, sendingMessages: {} });
   },
 }));
 
 /** 将 sending 状态的消息持久化到 localStorage */
 function persistPendingQueue(state: ChatState) {
   try {
-    const sendingMessages: Message[] = [];
-    for (const msgs of Object.values(state.messages)) {
-      for (const m of msgs) {
-        if (m.status === "sending") {
-          sendingMessages.push(m);
-        }
-      }
-    }
-    if (sendingMessages.length > 0) {
-      localStorage.setItem(PENDING_QUEUE_KEY, JSON.stringify(sendingMessages));
+    const sendingList = Object.values(state.sendingMessages);
+    if (sendingList.length > 0) {
+      localStorage.setItem(PENDING_QUEUE_KEY, JSON.stringify(sendingList));
     } else {
       localStorage.removeItem(PENDING_QUEUE_KEY);
     }
@@ -622,13 +637,18 @@ export function restorePendingQueue() {
     // 恢复消息到对应 chat 的 message 列表（如果还没有的话）
     const store = useChatStore.getState();
     const newMessages: Record<number, Message[]> = { ...store.messages };
+    const newSending: Record<string, Message> = { ...store.sendingMessages };
     for (const m of msgs) {
       const existing = newMessages[m.chat_id] || [];
       if (!existing.some((em) => em.client_msg_id === m.client_msg_id)) {
         newMessages[m.chat_id] = [...existing, m];
       }
+      if (m.client_msg_id) {
+        newSending[m.client_msg_id] = m;
+      }
     }
     store.setMessages(newMessages);
+    useChatStore.setState({ sendingMessages: newSending });
 
     // 逐个重试发送（间隔 500ms 避免并发）
     msgs.forEach((m, i) => {

@@ -100,6 +100,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   logout: () => {
+    // 清除聊天 store 中的 WS 超时定时器和持久化发送队列（动态 import 避免循环依赖）
+    import("@/stores/chat").then((m) => {
+      m.useChatStore.getState().clearAllPendingTimeouts();
+    });
     localStorage.removeItem("token");
     set({ token: null, user: null, error: null, _userFetched: false });
   },

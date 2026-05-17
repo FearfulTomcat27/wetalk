@@ -209,15 +209,13 @@ export default function ChatPage() {
   }, [userFetched, token, receiveMessage, updateMessageStatus, setConnected, incrementPendingRequests]);
 
   // 恢复持久化的待发送消息（页面重开后重试）
-  const restoredRef = useRef(false);
   useEffect(() => {
-    if (!userFetched || contacts.length === 0 || restoredRef.current) return;
-    restoredRef.current = true;
+    if (!userFetched) return;
     const timer = setTimeout(() => {
       restorePendingQueue();
     }, 300);
     return () => clearTimeout(timer);
-  }, [userFetched, contacts.length]);
+  }, [userFetched]);
 
   function handleSelectContact(id: number) {
     selectContact(id);

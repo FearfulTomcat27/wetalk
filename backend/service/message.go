@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"log"
 	"time"
 
 	"wetalk/common"
@@ -73,6 +74,7 @@ func (s *MessageService) SendMessage(senderID int64, req model.SendMessageReques
 	go func() {
 		members, err := s.chatSvc.GetMemberIDs(req.ChatID)
 		if err != nil {
+			log.Printf("SendMessage: failed to get members for cache invalidation chatID=%d: %v", req.ChatID, err)
 			return
 		}
 		for _, memberID := range members {
