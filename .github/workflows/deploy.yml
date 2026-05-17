@@ -90,6 +90,9 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SSH_PORT || 22 }}
           script: |
+            # 目录不存在则创建
+            mkdir -p ${{ env.DEPLOY_DIR }}/backend ${{ env.DEPLOY_DIR }}/frontend
+
             # 后端
             chmod +x ${{ env.DEPLOY_DIR }}/backend/wetalk-server
             sudo systemctl restart wetalk-backend
