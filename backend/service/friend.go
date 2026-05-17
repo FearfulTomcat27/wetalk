@@ -154,20 +154,26 @@ func (s *FriendService) ListFriends(userID int64, chatOnly ...bool) ([]model.Fri
 		friends = []model.FriendshipInfo{}
 	}
 
-	// 过滤已删除聊天记录的最后一条消息（MongoDB chat_deletions 中有记录则隐藏）
+	// 过滤已删除聊天记录的最后一条消息：仅当 last_message_time <= deletedAt 时才隐藏，
+	// 否则（删除之后又有新消息）保留正常显示。
 	for i, f := range friends {
 		if f.ChatID == 0 {
 			continue
 		}
 		deletedAt, err := dto.Message.GetChatDeletion(userID, f.ChatID)
-		if err != nil {
+		if err != nil || deletedAt == nil {
 			continue
 		}
-		if deletedAt != nil {
-			friends[i].LastMessage = ""
-			friends[i].LastMessageType = ""
-			friends[i].LastMessageTime = ""
+		// LastMessageTime 由 MySQL datetime 直出字符串（无时区），按 Local 解析后与 UTC 的 deletedAt 比较
+		if f.LastMessageTime != "" {
+			msgTime, parseErr := time.ParseInLocation("2006-01-02 15:04:05", f.LastMessageTime, time.Local)
+			if parseErr == nil && msgTime.After(*deletedAt) {
+				continue
+			}
 		}
+		friends[i].LastMessage = ""
+		friends[i].LastMessageType = ""
+		friends[i].LastMessageTime = ""
 	}
 
 	if cacheErr := s.cache.Set(key, friends, 5*time.Minute); cacheErr != nil {

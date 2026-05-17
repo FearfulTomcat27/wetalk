@@ -88,8 +88,26 @@ export const useChatStore = create<ChatState>((set, get) => ({
   pendingTimeouts: {},
   sendingMessages: {},
 
-  setContacts: (contacts: Contact[]) => {
-    set({ contacts });
+  setContacts: (incoming: Contact[]) => {
+    set((state) => {
+      const existingMap = new Map(state.contacts.map((c) => [c.chat_id, c]));
+      const merged = incoming.map((c) => {
+        const existing = existingMap.get(c.chat_id);
+        if (!existing) return c;
+        // 如果 store 中的联系人有通过实时事件更新的 lastMessageTime，保留较新的
+        if (existing.lastMessageTime && c.lastMessageTime) {
+          const existingTime = new Date(existing.lastMessageTime).getTime();
+          const incomingTime = new Date(c.lastMessageTime).getTime();
+          if (!isNaN(existingTime) && !isNaN(incomingTime) && existingTime >= incomingTime) {
+            return { ...c, lastMessage: existing.lastMessage, lastMessageType: existing.lastMessageType, lastMessageTime: existing.lastMessageTime };
+          }
+        } else if (existing.lastMessage && !c.lastMessage) {
+          return { ...c, lastMessage: existing.lastMessage, lastMessageType: existing.lastMessageType, lastMessageTime: existing.lastMessageTime };
+        }
+        return c;
+      });
+      return { contacts: merged };
+    });
   },
 
   selectContact: (id: number) => {
@@ -162,7 +180,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         ],
       },
       contacts: state.contacts.map((c) =>
-        c.id === activeContactId ? { ...c, lastMessage: text, lastMessageTime: new Date().toISOString() } : c
+        c.chat_id === chatId ? { ...c, lastMessage: text, lastMessageType: "text", lastMessageTime: new Date().toISOString() } : c
       ),
       inputTexts: { ...state.inputTexts, [activeContactId]: "" },
       quotedMessages: { ...state.quotedMessages, [String(activeContactId)]: null },
@@ -245,7 +263,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         ],
       },
       contacts: state.contacts.map((c) =>
-        c.id === activeContactId ? { ...c, lastMessage: lastMsgLabel, lastMessageTime: new Date().toISOString() } : c
+        c.chat_id === chatId ? { ...c, lastMessage: lastMsgLabel, lastMessageType: contentType, lastMessageTime: new Date().toISOString() } : c
       ),
       quotedMessages: { ...state.quotedMessages, [String(activeContactId)]: null },
       sendingMessages: { ...state.sendingMessages, [clientMsgId]: tempMsg },
@@ -372,7 +390,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         },
         contacts: state.contacts.map((c) =>
           c.chat_id === normalized.chat_id
-            ? { ...c, lastMessage: lastMsgLabel, lastMessageTime: normalized.created_at, unread: isActive ? c.unread : c.unread + 1 }
+            ? { ...c, lastMessage: lastMsgLabel, lastMessageType: normalized.content_type || "text", lastMessageTime: normalized.created_at, unread: isActive ? c.unread : c.unread + 1 }
             : c
         ),
         unreadCounts: {
