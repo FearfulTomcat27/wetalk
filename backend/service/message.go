@@ -70,7 +70,6 @@ func (s *MessageService) SendMessage(senderID int64, req model.SendMessageReques
 		log.Printf("SendMessage: UpdateLastMessage failed for chatID=%d msgID=%d: %v", req.ChatID, msgResp.ID, updateErr)
 	}
 
-
 	// 同步清除好友列表缓存，避免异步 goroutine 导致的竞态条件
 	// （MemberIDs 本身有 1h 缓存，不会增加明显延迟）
 	members, cacheErr := s.chatSvc.GetMemberIDs(req.ChatID)
