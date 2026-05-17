@@ -67,21 +67,19 @@ func (s *MessageService) SendMessage(senderID int64, req model.SendMessageReques
 
 	// 更新聊天的最后一条消息信息
 	if updateErr := s.chatSvc.UpdateLastMessage(req.ChatID, msgResp.ID, msgResp.Content, msgResp.ContentType, msgResp.CreatedAt); updateErr != nil {
-		_ = updateErr
+		log.Printf("SendMessage: UpdateLastMessage failed for chatID=%d msgID=%d: %v", req.ChatID, msgResp.ID, updateErr)
 	}
 
-	// 清除好友列表缓存，使前端下次 getFriends 能拿到最新的 last_message
-	go func() {
-		members, err := s.chatSvc.GetMemberIDs(req.ChatID)
-		if err != nil {
-			log.Printf("SendMessage: failed to get members for cache invalidation chatID=%d: %v", req.ChatID, err)
-			return
-		}
+	// 同步清除好友列表缓存，避免异步 goroutine 导致的竞态条件
+	// （MemberIDs 本身有 1h 缓存，不会增加明显延迟）
+	members, cacheErr := s.chatSvc.GetMemberIDs(req.ChatID)
+	if cacheErr != nil {
+		log.Printf("SendMessage: failed to get members for cache invalidation chatID=%d: %v", req.ChatID, cacheErr)
+	} else {
 		for _, memberID := range members {
 			_ = common.CacheDel(fmt.Sprintf("friendships:%d", memberID), fmt.Sprintf("friendships:%d:chatted", memberID))
 		}
-	}()
-
+	}
 	return msgResp, nil
 }
 
