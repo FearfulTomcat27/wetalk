@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { ContactList } from "@/components/ContactList";
 import { ChatArea } from "@/components/ChatArea";
 import { ChatInput } from "@/components/ChatInput";
-import { useChatStore } from "@/stores/chat";
+import { useChatStore, restorePendingQueue } from "@/stores/chat";
 import { useAuthStore } from "@/stores/auth";
 import { wsClient } from "@/lib/ws";
 import { getFriends, getMessages, markAsRead, getPendingRequests, getUnreadCounts, deleteChatHistory } from "@/lib/api";
@@ -207,6 +207,15 @@ export default function ChatPage() {
       wsClient.disconnect();
     };
   }, [userFetched, token, receiveMessage, updateMessageStatus, setConnected, incrementPendingRequests]);
+
+  // 恢复持久化的待发送消息（页面重开后重试）
+  useEffect(() => {
+    if (!userFetched) return;
+    const timer = setTimeout(() => {
+      restorePendingQueue();
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [userFetched]);
 
   function handleSelectContact(id: number) {
     selectContact(id);

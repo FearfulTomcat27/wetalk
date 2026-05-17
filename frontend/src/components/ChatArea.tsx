@@ -6,7 +6,7 @@ import type { Message } from "@/types/chat";
 import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/Avatar";
 import { useAuthStore } from "@/stores/auth";
-import { Download, X } from "lucide-react";
+import { Download, X, Loader2, AlertCircle } from "lucide-react";
 import { MessageContextMenu } from "@/components/MessageContextMenu";
 import { useChatStore } from "@/stores/chat";
 import { deleteMessage } from "@/lib/api/messages";
@@ -250,6 +250,7 @@ export function ChatArea({ messages, currentUserId, contactName, contactUsername
   const user = useAuthStore((s) => s.user);
   const activeContactId = useChatStore((s) => s.activeContactId);
   const setQuotedMessage = useChatStore((s) => s.setQuotedMessage);
+  const retryMessage = useChatStore((s) => s.retryMessage);
 
   const selfUsername = user?.username ?? "me";
   const otherUsername = contactUsername ?? contactName ?? "?";
@@ -329,7 +330,7 @@ export function ChatArea({ messages, currentUserId, contactName, contactUsername
           const showTime = shouldShowTime(messages, index);
 
           return (
-            <div key={msg.id}>
+            <div key={msg.client_msg_id || msg.id}>
               {/* 时间分隔符 */}
               {showTime && (
                 <div className="flex items-center justify-center py-3">
@@ -455,6 +456,18 @@ export function ChatArea({ messages, currentUserId, contactName, contactUsername
                     </>
                   )}
                 </div>
+                {/* 发送状态指示（仅自己的消息，放在气泡旁边） */}
+                {isSelf && msg.status === "sending" && (
+                  <Loader2 className="size-3 shrink-0 animate-spin text-muted-foreground/40 self-end mb-4" />
+                )}
+                {isSelf && msg.status === "failed" && (
+                  <AlertCircle
+                    className="size-3.5 shrink-0 cursor-pointer text-red-500 hover:text-red-600 transition-colors self-end mb-4"
+                    onClick={(e) => { e.stopPropagation(); retryMessage(msg); }}
+                    role="button"
+                    aria-label="重新发送"
+                  />
+                )}
               </div>
             </div>
           );

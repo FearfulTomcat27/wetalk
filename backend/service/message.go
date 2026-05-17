@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"log"
 	"time"
 
 	"wetalk/common"
@@ -68,6 +69,18 @@ func (s *MessageService) SendMessage(senderID int64, req model.SendMessageReques
 	if updateErr := s.chatSvc.UpdateLastMessage(req.ChatID, msgResp.ID, msgResp.Content, msgResp.ContentType, msgResp.CreatedAt); updateErr != nil {
 		_ = updateErr
 	}
+
+	// 清除好友列表缓存，使前端下次 getFriends 能拿到最新的 last_message
+	go func() {
+		members, err := s.chatSvc.GetMemberIDs(req.ChatID)
+		if err != nil {
+			log.Printf("SendMessage: failed to get members for cache invalidation chatID=%d: %v", req.ChatID, err)
+			return
+		}
+		for _, memberID := range members {
+			_ = common.CacheDel(fmt.Sprintf("friendships:%d", memberID), fmt.Sprintf("friendships:%d:chatted", memberID))
+		}
+	}()
 
 	return msgResp, nil
 }
