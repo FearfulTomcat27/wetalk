@@ -10,7 +10,7 @@ on:
 env:
   GO_VERSION: "1.26"
   NODE_VERSION: "22"
-  DEPLOY_DIR: /opt/wetalk
+  DEPLOY_DIR: /var/www/wetalk
 
 permissions:
   contents: read
@@ -45,7 +45,7 @@ jobs:
         working-directory: backend
         run: CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o wetalk-server ./cmd
 
-      - name: Build frontend
+      - name: Build frontend (static export)
         working-directory: frontend
         env:
           NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
@@ -54,8 +54,8 @@ jobs:
           pnpm install --frozen-lockfile
           pnpm build
 
-      - name: Package frontend standalone
-        run: tar -czf frontend-standalone.tar.gz -C frontend/.next/standalone .
+      - name: Package frontend for transfer
+        run: tar -czf frontend-out.tar.gz -C frontend/out .
 
       # ---- 上传到服务器 ----
 
@@ -70,14 +70,14 @@ jobs:
           target: ${{ env.DEPLOY_DIR }}/backend/
           strip_components: 1
 
-      - name: Copy frontend package
+      - name: Copy frontend static files
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SSH_PORT || 22 }}
-          source: frontend-standalone.tar.gz
+          source: frontend-out.tar.gz
           target: /tmp/
 
       # ---- 重启服务 ----
@@ -94,10 +94,10 @@ jobs:
             chmod +x ${{ env.DEPLOY_DIR }}/backend/wetalk-server
             sudo systemctl restart wetalk-backend
 
-            # 前端
+            # 前端（nginx 静态托管）
             rm -rf ${{ env.DEPLOY_DIR }}/frontend/*
-            tar -xzf /tmp/frontend-standalone.tar.gz -C ${{ env.DEPLOY_DIR }}/frontend/
-            rm /tmp/frontend-standalone.tar.gz
-            sudo systemctl restart wetalk-frontend
+            tar -xzf /tmp/frontend-out.tar.gz -C ${{ env.DEPLOY_DIR }}/frontend/
+            rm /tmp/frontend-out.tar.gz
+            sudo systemctl reload nginx
 
             echo "✅ 部署完成"
