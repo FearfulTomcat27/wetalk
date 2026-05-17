@@ -2,7 +2,7 @@ name: Deploy
 
 on:
   push:
-    branches: [main]
+    branches: [ main ]
     paths:
       - "backend/**"
       - "frontend/**"
@@ -95,7 +95,7 @@ jobs:
 
             # 后端
             chmod +x ${{ env.DEPLOY_DIR }}/backend/wetalk-server
-            sudo systemctl restart wetalk-backend
+            sudo systemctl restart wetalk
 
             # 前端（nginx 静态托管）
             rm -rf ${{ env.DEPLOY_DIR }}/frontend/*
