@@ -16,14 +16,12 @@ func AuthMiddleware(jwtSecret string) gin.HandlerFunc {
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
 			common.AppError(c, types.ErrMissingToken)
-			c.Abort()
 			return
 		}
 
 		parts := strings.SplitN(authHeader, " ", 2)
 		if len(parts) != 2 || parts[0] != "Bearer" {
 			common.AppError(c, types.ErrInvalidTokenFormat)
-			c.Abort()
 			return
 		}
 
@@ -35,16 +33,13 @@ func AuthMiddleware(jwtSecret string) gin.HandlerFunc {
 			return []byte(jwtSecret), nil
 		})
 
-		if err != nil || !token.Valid {
-			common.AppError(c, types.ErrInvalidToken)
-			c.Abort()
+		if err != nil {
 			return
 		}
 
 		claims, ok := token.Claims.(jwt.MapClaims)
 		if !ok {
 			common.AppError(c, types.ErrInvalidClaims)
-			c.Abort()
 			return
 		}
 
