@@ -424,7 +424,7 @@ export function ChatArea({ messages, currentUserId, contactName, contactUsername
                             })()}
                           </div>
                         ) : (
-                          <p>{msg.content}</p>
+                          <p dangerouslySetInnerHTML={{ __html: msg.content }} />
                         )}
                       </div>
                       {/* 被引用消息预览 */}
