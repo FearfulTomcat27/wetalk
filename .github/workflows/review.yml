@@ -8,7 +8,7 @@ jobs:
   review-by-author:
     # Only run for PRs from specific authors
     if: |
-      github.event.pull_request.user.login == 'fearfultomcat27'
+      github.event.pull_request.author_association == 'OWNER'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -24,6 +24,13 @@ jobs:
         uses: anthropics/claude-code-action@v1
         env:
           ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+          ANTHROPIC_AUTH_TOKEN: ${{ secrets.ANTHROPIC_AUTH_TOKEN }}
+          ANTHROPIC_MODEL: ${{ secrets.ANTHROPIC_MODEL }}
+          ANTHROPIC_DEFAULT_OPUS_MODEL: ${{ secrets.ANTHROPIC_DEFAULT_OPUS_MODEL }}
+          ANTHROPIC_DEFAULT_SONNET_MODEL: ${{ secrets.ANTHROPIC_DEFAULT_SONNET_MODEL }}
+          ANTHROPIC_DEFAULT_HAIKU_MODEL: ${{ secrets.ANTHROPIC_DEFAULT_HAIKU_MODEL }}
+          CLAUDE_CODE_SUBAGENT_MODEL: ${{ secrets.CLAUDE_CODE_SUBAGENT_MODEL }}
+          CLAUDE_CODE_EFFORT_LEVEL: ${{ secrets.CLAUDE_CODE_EFFORT_LEVEL }}
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           prompt: |
