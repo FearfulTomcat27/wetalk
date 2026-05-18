@@ -34,39 +34,50 @@ jobs:
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           prompt: |
-            REPO: ${{ github.repository }}
-            PR NUMBER: ${{ github.event.pull_request.number }}
+            仓库: ${{ github.repository }}
+            PR 编号: ${{ github.event.pull_request.number }}
 
-            Please provide a thorough review of this pull request.
+            请对这个 Pull Request 进行一次彻底的代码审查。
 
-            Note: The PR branch is already checked out in the current working directory.
+            说明: PR 分支已经检出到当前工作目录,可以直接读取文件。
 
-            Since this is from a specific author that requires careful review,
-            please pay extra attention to:
-            - Adherence to project coding standards
-            - Proper error handling
-            - Security best practices
-            - Test coverage
-            - Documentation
+            由于该 PR 来自需要重点审查的特定作者,请额外关注以下方面:
+            - 是否遵循项目编码规范(参见 CLAUDE.md)
+            - 错误处理是否得当
+            - 安全最佳实践
+            - 测试覆盖情况
+            - 文档是否完善
 
-            ## How to deliver your review (REQUIRED)
+            请给出详细的反馈和改进建议。
 
-            You MUST publish your findings back to GitHub — otherwise the review is invisible.
-            Use BOTH channels below. Do not finish your turn without calling these tools.
+            ## 语言要求(必须遵守)
 
-            1. For each concrete code-level issue, call
-               `mcp__github_inline_comment__create_inline_comment` on the exact file/line.
-               Keep each inline comment focused on one issue, with a suggested fix when possible.
+            所有发布到 GitHub 的审查内容(包括每一条行内评论和最终的总结评论)都必须使用简体中文。
+            代码标识符、文件路径、命令名、引用的代码片段等保持原文形式,不需要翻译。
 
-            2. After all inline comments, post ONE overall summary by running:
-               `gh pr comment ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --body-file <path>`
-               The summary should contain:
-                 - A short verdict (approve / request changes / comment).
-                 - Highlights of what looks good.
-                 - A bulleted list of the issues you flagged inline (so reviewers see them in one place).
-                 - Any concerns that did not map to a specific line (architecture, missing tests, docs, etc.).
+            ## 如何发布审查结果(必须执行)
 
-            If you find no issues at all, still post the summary comment stating that explicitly.
+            你必须把审查结果发回 GitHub,否则审查结果不可见。
+            请同时使用下面两种渠道,在收尾前必须调用这些工具:
+
+            1. 对每一个具体的代码层面问题,调用
+               `mcp__github_inline_comment__create_inline_comment`,在对应的文件/行号处发表评论。
+               每条行内评论聚焦一个问题,尽量给出修复建议。评论正文必须使用中文。
+
+            2. 所有行内评论发完后,通过 stdin 把 markdown 管道传给 `gh pr comment`,
+               发一条整体总结评论(这样无需文件写入工具)。命令格式如下:
+
+               gh pr comment ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --body-file - <<'REVIEW_EOF'
+               <你的完整 markdown 总结,使用中文>
+               REVIEW_EOF
+
+               总结内容应包含:
+                 - 简短的结论(批准 / 需要修改 / 仅评论)。
+                 - 做得好的地方。
+                 - 行内已标注问题的汇总清单(便于一次性查看)。
+                 - 没有具体行号的整体性问题(架构、测试缺失、文档等)。
+
+            如果没有发现任何问题,仍然要发一条总结评论明确说明。
 
           claude_args: |
-            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(cat:*),Bash(mkdir:*),Bash(tee:*),Write,Read,Grep,Glob"
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Read,Grep,Glob"
